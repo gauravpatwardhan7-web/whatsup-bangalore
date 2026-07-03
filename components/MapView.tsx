@@ -38,6 +38,15 @@ export default function MapView({ places, selectedId, onSelect, onCenterChange }
       attributionControl: { compact: true },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
+    // "Locate me" — Google-Maps-style button + live location dot.
+    map.addControl(
+      new maplibregl.GeolocateControl({
+        positionOptions: { enableHighAccuracy: true },
+        trackUserLocation: true,
+        showUserLocation: true,
+      }),
+      "bottom-right"
+    );
     map.on("moveend", () => {
       const c = map.getCenter();
       onCenterChangeRef.current?.({ lat: c.lat, lng: c.lng });

@@ -37,6 +37,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
   const [locResults, setLocResults] = useState<GeocodeResult[]>([]);
   const [location, setLocation] = useState<GeocodeResult | null>(null);
   const [searching, setSearching] = useState(false);
+  const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
@@ -78,6 +79,26 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
     setLocation({ label: `Pinned on map (${c.lat.toFixed(4)}, ${c.lng.toFixed(4)})`, lat: c.lat, lng: c.lng });
     setLocResults([]);
     setLocQuery("");
+  }
+
+  function useMyLocation() {
+    if (!navigator.geolocation) { setError("Location isn't available in this browser."); return; }
+    setError(null);
+    setLocating(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const { latitude, longitude } = pos.coords;
+        setLocation({ label: `My location (${latitude.toFixed(4)}, ${longitude.toFixed(4)})`, lat: latitude, lng: longitude });
+        setLocResults([]);
+        setLocQuery("");
+        setLocating(false);
+      },
+      () => {
+        setError("Couldn't get your location — allow location access, or search instead.");
+        setLocating(false);
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
   }
 
   async function handleSubmit() {
@@ -176,13 +197,22 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
                 📍 {r.label}
               </button>
             ))}
-            <button onClick={useMapCenter} style={{
-              marginTop: 7, padding: "8px 12px", borderRadius: 999, cursor: "pointer",
-              border: `1.5px dashed ${DS.borderMd}`, background: "#fff", fontSize: 12.5,
-              fontWeight: 600, color: DS.textSub, fontFamily: "inherit",
-            }}>
-              🎯 Drop pin at current map center
-            </button>
+            <div style={{ display: "flex", gap: 7, marginTop: 7, flexWrap: "wrap" }}>
+              <button onClick={useMyLocation} disabled={locating} style={{
+                padding: "8px 12px", borderRadius: 999, cursor: "pointer",
+                border: `1.5px solid ${DS.accent}`, background: "#fdf6f3", fontSize: 12.5,
+                fontWeight: 700, color: DS.accent, fontFamily: "inherit",
+              }}>
+                {locating ? "Locating…" : "📍 Use my current location"}
+              </button>
+              <button onClick={useMapCenter} style={{
+                padding: "8px 12px", borderRadius: 999, cursor: "pointer",
+                border: `1.5px dashed ${DS.borderMd}`, background: "#fff", fontSize: 12.5,
+                fontWeight: 600, color: DS.textSub, fontFamily: "inherit",
+              }}>
+                🎯 Drop pin at map center
+              </button>
+            </div>
           </>
         )}
 
