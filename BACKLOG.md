@@ -2,6 +2,49 @@
 
 Ideas parked for later. Newest ideas at the top of "Feature ideas". Roughly ordered within each section; not committed scope.
 
+## Guardrails & edge cases (must-address before real users)
+
+The MVP trusts users. A public, community-enriched map needs abuse handling or it degrades fast. Grouped by area; each needs a decision + implementation.
+
+### Duplicate / conflicting spots
+The one that prompted this. Two people add the same place (accidentally, or deliberately to spam/vandalize).
+- **Detect on submit**: before saving, check for an existing place within ~75m *and* fuzzy-matching title → warn "La Casa already exists nearby — is this it?" with a link to the existing one. Cheap win, kills most accidental dupes.
+- **Merge tooling (admin)**: pick a canonical place, fold votes/comments/photos from the duplicate into it, redirect/delete the other. Needs a `merged_into` column or a merge RPC.
+- **Community flag**: "Report as duplicate / wrong location / closed" on the detail sheet → goes to an admin queue.
+- Decide: auto-block near-exact dupes vs. allow-with-warning vs. always-allow-then-merge. (Leaning: warn-and-allow, then admin merge.)
+
+### Vote / trending manipulation
+- One-vote-per-user is enforced by the PK, but a determined user makes multiple Google accounts to inflate/bury a spot.
+- Rate-limit votes/submissions per user per hour. Consider velocity checks (20 votes in 10s = bot).
+- Trending score should resist brigading: cap per-user influence, weight by account age, or dampen sudden spikes. Revisit when Phase 2 external signals join the score.
+
+### Spam / abusive content
+- Submissions and comments are free text + user image uploads → profanity, hate, spam links, NSFW/irrelevant photos.
+- Text: basic profanity/link filter on submit; report button on comments; soft-delete + shadow-ban repeat offenders.
+- Images: size/type limits exist (5MB), but need NSFW/format validation and EXIF stripping (uploads can leak location/personal data).
+- Non-admin submissions already go to a `pending` queue — keep that as the backstop, but it doesn't scale without the above.
+
+### Bad / malicious location data
+- Pin dropped in the wrong place, offshore, or outside Bengaluru entirely (map-center drop makes this easy).
+- Validate lat/lng is inside a Bengaluru bounding box on submit; reject/flag outliers.
+- Nominatim/geocoding can return nothing or wrong results — handle empty + let user adjust the pin.
+- Events with past dates, end-before-start, or absurd future dates → validate.
+
+### Auth / account edge cases
+- Google returns no email, or a user revokes access. `handle_new_user` assumes name/email exist — harden the trigger.
+- Deleted auth user: `on delete cascade` wipes their places/votes/comments — is that desired, or should content persist anonymized?
+- Admin bootstrapping is manual SQL — fine now, but document/secure it; don't ship a way to self-promote.
+
+### Reliability / infra
+- Free-tier Supabase pauses after ~1 week idle → app looks broken. Monitor + document un-pause.
+- OpenFreeMap tiles are a free community service and can go down (already saw a blank map once) → consider a paid tile fallback (MapTiler key) for production.
+- Realtime channel drops on flaky networks → ensure graceful reconnect and that optimistic UI reconciles with server truth.
+- Storage/DB quota exhaustion on free tier as photos pile up → monitor, add cleanup for rejected submissions.
+
+### Privacy / safety
+- "Use my current location" and uploaded photo EXIF can expose where a user lives — be explicit, strip EXIF, never store precise user location.
+- Someone adds a private residence / doxes a location as a "spot" → reporting + takedown flow.
+
 ## Feature ideas
 
 ### Account / activity hub — "my contributions" + been-there / collectibles
