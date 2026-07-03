@@ -141,15 +141,25 @@ export default function MapApp() {
         </button>
         {user ? (
           <button onClick={handleSignOut} title={`Signed in as ${user.name} — click to sign out`} style={{
-            width: 38, height: 38, borderRadius: 999, border: `2px solid #fff`, cursor: "pointer",
-            boxShadow: FLOAT_SHADOW, overflow: "hidden", background: DS.accentLt,
+            position: "relative", width: 38, height: 38, borderRadius: 999, border: `2px solid #fff`,
+            cursor: "pointer", boxShadow: FLOAT_SHADOW, overflow: "hidden", background: DS.accentLt,
             color: "#fff", fontWeight: 700, fontSize: 15, padding: 0, flexShrink: 0,
+            display: "flex", alignItems: "center", justifyContent: "center",
           }}>
-            {user.avatarUrl ? (
+            {/* Initial sits underneath as the fallback; the avatar image
+                overlays it and removes itself if it fails to load. */}
+            <span>{user.name.charAt(0).toUpperCase()}</span>
+            {user.avatarUrl && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={user.avatarUrl} alt={user.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-            ) : (
-              user.name.charAt(0).toUpperCase()
+              <img
+                src={user.avatarUrl}
+                alt=""
+                referrerPolicy="no-referrer"
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
+                style={{
+                  position: "absolute", inset: 0, width: "100%", height: "100%", objectFit: "cover",
+                }}
+              />
             )}
           </button>
         ) : (
