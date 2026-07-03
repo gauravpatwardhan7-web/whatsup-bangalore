@@ -1,8 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BLR_CENTER, CATEGORIES, DS, FLOAT_SHADOW, type Category } from "@/lib/ds";
-import { fetchPlaces, getSessionUser, signInWithGoogle, signOut } from "@/lib/data";
+import { BLR_CENTER, CATEGORIES, DS, FLOAT_SHADOW, buzzScore, type Category } from "@/lib/ds";
+import { fetchPlaces, fetchPlaceStats, getSessionUser, signInWithGoogle, signOut, subscribeToActivity } from "@/lib/data";
 import { MOCK_MODE } from "@/lib/supabase/client";
 import { isThisWeekend } from "@/lib/format";
 import type { Place, SessionUser, SortMode } from "@/lib/types";
@@ -49,6 +49,24 @@ export default function MapApp() {
     getSessionUser().then(setUser).catch(() => {});
   }, []);
 
+  // Real-time: when anyone votes or comments, refresh that one place's live
+  // counts so its badge/glow/rank updates for everyone without a refresh.
+  useEffect(() => {
+    const unsubscribe = subscribeToActivity(async (placeId) => {
+      try {
+        const stats = await fetchPlaceStats(placeId);
+        if (stats) {
+          setPlaces((prev) => prev.map((p) =>
+            p.id === placeId
+              ? { ...p, vote_count: stats.vote_count, comment_count: stats.comment_count, trending_score: stats.trending_score }
+              : p
+          ));
+        }
+      } catch { /* ignore transient realtime refresh errors */ }
+    });
+    return unsubscribe;
+  }, []);
+
   useEffect(() => {
     if (!toast) return;
     const t = setTimeout(() => setToast(null), 4000);
@@ -60,7 +78,7 @@ export default function MapApp() {
     if (activeCats.size > 0) rows = rows.filter((p) => activeCats.has(p.category));
     if (weekendOnly) rows = rows.filter((p) => isThisWeekend(p.event_start));
     const sorted = [...rows];
-    if (sort === "trending") sorted.sort((a, b) => b.trending_score - a.trending_score);
+    if (sort === "trending") sorted.sort((a, b) => buzzScore(b.vote_count, b.comment_count) - buzzScore(a.vote_count, a.comment_count));
     if (sort === "newest") sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
     if (sort === "loved") sorted.sort((a, b) => b.vote_count - a.vote_count);
     return sorted;

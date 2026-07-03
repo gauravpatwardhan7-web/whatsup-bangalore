@@ -29,12 +29,42 @@ export const CATEGORIES: Record<Category, { label: string; emoji: string; color:
   event:       { label: "Event",       emoji: "📅", color: "#dc2626", tint: "#fef2f2" },
 };
 
-// Trending tiers drive pin glow. Thresholds are on trending_score
-// (time-decayed votes + comments + external buzz over 14 days).
-export function trendingTier(score: number): "hot" | "warm" | "none" {
-  if (score >= 6) return "hot";
-  if (score >= 2) return "warm";
-  return "none";
+// Live "buzz" — computed from the counts currently on screen, so the badge
+// and glow always match what the user sees (no stale server snapshot).
+// A comment weighs more than a vote (more effort). Server-side trending_score
+// (time-decayed, + external mentions) still drives the initial fetch order;
+// this drives the live visual tier and re-sort.
+export function buzzScore(voteCount: number, commentCount: number): number {
+  return voteCount + 1.5 * commentCount;
+}
+
+export interface BuzzTier {
+  level: 0 | 1 | 2 | 3 | 4;
+  label: string | null;
+  badgeEmoji: string;
+  color: string;      // badge text / accent
+  badgeBg: string;
+  badgeBorder: string;
+  pinClass: string;   // css class on the pin visual
+  pinColor: string;   // halo colour for the glow
+}
+
+// Five levels. Thresholds are deliberately reachable early (a young map is
+// mostly quiet) but keep climbing as real activity stacks up.
+const BUZZ_TIERS: (BuzzTier & { min: number })[] = [
+  { min: 18, level: 4, label: "On fire",    badgeEmoji: "🔥", color: "#ffffff", badgeBg: "#dc2626", badgeBorder: "#dc2626", pinClass: "pin-l4", pinColor: "220,38,38" },
+  { min: 9,  level: 3, label: "Buzzing",    badgeEmoji: "⚡", color: "#ffffff", badgeBg: "#ea580c", badgeBorder: "#ea580c", pinClass: "pin-l3", pinColor: "234,88,12" },
+  { min: 4,  level: 2, label: "Trending",   badgeEmoji: "↗",  color: "#c4622d", badgeBg: "#fdf6f3", badgeBorder: "#f0ddd5", pinClass: "pin-l2", pinColor: "196,98,45" },
+  { min: 1.5,level: 1, label: "Warming up", badgeEmoji: "•",  color: "#b45309", badgeBg: "#fffbeb", badgeBorder: "#fde68a", pinClass: "pin-l1", pinColor: "217,119,6" },
+  { min: 0,  level: 0, label: null,         badgeEmoji: "",   color: "",        badgeBg: "",        badgeBorder: "",        pinClass: "",       pinColor: "" },
+];
+
+export function buzzTier(score: number): BuzzTier {
+  return BUZZ_TIERS.find((t) => score >= t.min)!;
+}
+
+export function placeTier(place: { vote_count: number; comment_count: number }): BuzzTier {
+  return buzzTier(buzzScore(place.vote_count, place.comment_count));
 }
 
 export const BLR_CENTER: [number, number] = [77.5946, 12.9716];

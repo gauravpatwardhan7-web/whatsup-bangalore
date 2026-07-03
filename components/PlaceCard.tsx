@@ -1,6 +1,6 @@
 "use client";
 
-import { CARD_SHADOW, CATEGORIES, DS, trendingTier } from "@/lib/ds";
+import { CARD_SHADOW, CATEGORIES, DS, placeTier } from "@/lib/ds";
 import { formatEventWindow } from "@/lib/format";
 import type { Place } from "@/lib/types";
 
@@ -12,7 +12,7 @@ interface Props {
 
 export default function PlaceCard({ place, selected, onClick }: Props) {
   const cat = CATEGORIES[place.category];
-  const tier = trendingTier(place.trending_score);
+  const tier = placeTier(place);
   return (
     <button
       onClick={onClick}
@@ -35,15 +35,13 @@ export default function PlaceCard({ place, selected, onClick }: Props) {
             }}>
               {place.title}
             </span>
-            {tier !== "none" && (
+            {tier.label && (
               <span style={{
                 fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 999,
-                background: tier === "hot" ? "#fef2f2" : "#fdf6f3",
-                color: tier === "hot" ? "#dc2626" : DS.accent,
-                border: `1px solid ${tier === "hot" ? "#fca5a5" : "#f0ddd5"}`,
-                whiteSpace: "nowrap",
+                background: tier.badgeBg, color: tier.color,
+                border: `1px solid ${tier.badgeBorder}`, whiteSpace: "nowrap",
               }}>
-                {tier === "hot" ? "🔥 Hot" : "↗ Trending"}
+                {tier.badgeEmoji} {tier.label}
               </span>
             )}
           </div>

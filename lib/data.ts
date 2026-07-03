@@ -51,6 +51,45 @@ export async function fetchPlaces(): Promise<Place[]> {
   return (data ?? []) as Place[];
 }
 
+// Fresh live counts for a single place (used by the realtime refresh).
+export async function fetchPlaceStats(
+  placeId: string
+): Promise<{ vote_count: number; comment_count: number; trending_score: number } | null> {
+  if (MOCK_MODE) {
+    const p = mockPlaces.find((x) => x.id === placeId);
+    return p ? { vote_count: p.vote_count, comment_count: p.comment_count, trending_score: p.trending_score } : null;
+  }
+  const sb = supabaseBrowser();
+  const { data, error } = await sb
+    .from("places_with_stats")
+    .select("vote_count, comment_count, trending_score")
+    .eq("id", placeId)
+    .single();
+  if (error) return null;
+  return data as { vote_count: number; comment_count: number; trending_score: number };
+}
+
+// Subscribe to all vote/comment changes; calls back with the affected place_id.
+// Returns an unsubscribe function. No-op in mock mode.
+export function subscribeToActivity(onChange: (placeId: string) => void): () => void {
+  if (MOCK_MODE) return () => {};
+  const sb = supabaseBrowser();
+  const channel = sb
+    .channel("activity")
+    .on("postgres_changes", { event: "*", schema: "public", table: "votes" },
+      (payload) => {
+        const row = (payload.new ?? payload.old) as { place_id?: string } | null;
+        if (row?.place_id) onChange(row.place_id);
+      })
+    .on("postgres_changes", { event: "*", schema: "public", table: "comments" },
+      (payload) => {
+        const row = (payload.new ?? payload.old) as { place_id?: string } | null;
+        if (row?.place_id) onChange(row.place_id);
+      })
+    .subscribe();
+  return () => { sb.removeChannel(channel); };
+}
+
 export async function toggleVote(place: Place): Promise<void> {
   if (MOCK_MODE) {
     mockPlaces = mockPlaces.map((p) =>

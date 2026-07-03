@@ -43,23 +43,24 @@ body {
   font-size: 12px;
   line-height: 1;
 }
-.pin-warm {
-  animation: glow-warm 2.4s ease-in-out infinite;
+/* Five buzz levels — each pulses harder, glows wider, and grows a touch.
+   --glow is the halo colour (r,g,b) set inline per category tier. */
+.pin-l1 { animation: glow 2.8s ease-in-out infinite; --spread: 6px;  --peak: 0.40; }
+.pin-l2 { animation: glow 2.4s ease-in-out infinite; --spread: 9px;  --peak: 0.48; }
+.pin-l3 {
+  width: 30px; height: 30px;
+  animation: glow 1.9s ease-in-out infinite; --spread: 13px; --peak: 0.55;
 }
-.pin-hot {
-  width: 32px;
-  height: 32px;
-  animation: glow-hot 1.6s ease-in-out infinite;
+.pin-l3 span { font-size: 14px; }
+.pin-l4 {
+  width: 34px; height: 34px;
+  animation: glow 1.5s ease-in-out infinite; --spread: 17px; --peak: 0.62;
 }
-.pin-hot span { font-size: 15px; }
+.pin-l4 span { font-size: 16px; }
 
-@keyframes glow-warm {
-  0%, 100% { box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 0 rgba(196, 98, 45, 0.45); }
-  50%      { box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 9px rgba(196, 98, 45, 0); }
-}
-@keyframes glow-hot {
-  0%, 100% { box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 0 rgba(220, 38, 38, 0.55); }
-  50%      { box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 14px rgba(220, 38, 38, 0); }
+@keyframes glow {
+  0%, 100% { box-shadow: 0 2px 7px rgba(0,0,0,0.28), 0 0 0 0 rgba(var(--glow), var(--peak)); }
+  50%      { box-shadow: 0 2px 7px rgba(0,0,0,0.28), 0 0 0 var(--spread) rgba(var(--glow), 0); }
 }
 
 @keyframes spin {

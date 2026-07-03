@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
-import { BLR_CENTER, CATEGORIES, trendingTier } from "@/lib/ds";
+import { BLR_CENTER, CATEGORIES, placeTier } from "@/lib/ds";
 import type { Place } from "@/lib/types";
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
@@ -114,13 +114,15 @@ export default function MapView({ places, selectedId, onSelect, onCenterChange }
 
 function styleMarker(inner: HTMLElement, place: Place, selected: boolean) {
   const cat = CATEGORIES[place.category];
-  const tier = trendingTier(place.trending_score);
-  inner.className = `pin${tier === "hot" ? " pin-hot" : tier === "warm" ? " pin-warm" : ""}`;
+  const tier = placeTier(place);
+  inner.className = `pin${tier.pinClass ? " " + tier.pinClass : ""}`;
   inner.style.background = cat.color;
+  inner.style.setProperty("--glow", tier.pinColor || "0,0,0");
   inner.style.outline = selected ? `3px solid ${cat.color}55` : "none";
   inner.innerHTML = `<span>${cat.emoji}</span>`;
   inner.title = place.title;
-  // Stacking must be set on the marker element MapLibre positions.
+  // Higher tiers stack above quieter pins; selection wins. Set on the
+  // marker element MapLibre positions (the parent), not the rotated visual.
   const outer = inner.parentElement;
-  if (outer) outer.style.zIndex = selected ? "30" : tier === "hot" ? "20" : tier === "warm" ? "10" : "1";
+  if (outer) outer.style.zIndex = String(selected ? 30 : 5 + tier.level * 3);
 }

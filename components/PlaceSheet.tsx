@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CATEGORIES, DS, FLOAT_SHADOW, trendingTier } from "@/lib/ds";
+import { CATEGORIES, DS, FLOAT_SHADOW, placeTier } from "@/lib/ds";
 import { addComment, fetchComments, toggleVote } from "@/lib/data";
 import { formatEventWindow, timeAgo } from "@/lib/format";
 import type { Place, PlaceComment, SessionUser } from "@/lib/types";
@@ -20,7 +20,7 @@ export default function PlaceSheet({
   place, user, isMobile, onClose, onVoteToggled, onCommentAdded, onSignInNeeded,
 }: Props) {
   const cat = CATEGORIES[place.category];
-  const tier = trendingTier(place.trending_score);
+  const tier = placeTier(place);
   // Keyed by place id so switching places shows "Loading…" without a reset call.
   const [loaded, setLoaded] = useState<{ placeId: string; rows: PlaceComment[] } | null>(null);
   const comments = loaded?.placeId === place.id ? loaded.rows : null;
@@ -105,14 +105,15 @@ export default function PlaceSheet({
             width: 28, height: 28, cursor: "pointer", color: DS.textSub, fontSize: 15, flexShrink: 0,
           }}>✕</button>
         </div>
-        {(tier !== "none" || place.event_start) && (
+        {(tier.label || place.event_start) && (
           <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
-            {tier !== "none" && (
+            {tier.label && (
               <span style={{
                 fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 999,
-                background: tier === "hot" ? "#dc2626" : DS.accent, color: "#fff",
+                background: tier.badgeBg, color: tier.color,
+                border: `1px solid ${tier.badgeBorder}`,
               }}>
-                {tier === "hot" ? "🔥 Hot right now" : "↗ Trending this week"}
+                {tier.badgeEmoji} {tier.label}{tier.level >= 3 ? " right now" : ""}
               </span>
             )}
             {place.event_start && (
