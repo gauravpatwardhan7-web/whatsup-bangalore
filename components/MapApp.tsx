@@ -23,6 +23,8 @@ function useIsMobile() {
   return mobile;
 }
 
+const TOP_N = 10;
+
 const SORTS: { id: SortMode; label: string }[] = [
   { id: "trending", label: "Trending" },
   { id: "newest", label: "Newest" },
@@ -83,6 +85,22 @@ export default function MapApp() {
     if (sort === "loved") sorted.sort((a, b) => b.vote_count - a.vote_count);
     return sorted;
   }, [places, activeCats, weekendOnly, sort]);
+
+  // "Trending" and "Most loved" are rankings → show a numbered Top 10.
+  // "Newest" is a feed → show it all, unranked.
+  const isRanked = sort !== "newest";
+  const visible = isRanked ? filtered.slice(0, TOP_N) : filtered;
+  const soleCat = activeCats.size === 1 ? [...activeCats][0] : null;
+
+  const listHeading = loading
+    ? "Loading the city…"
+    : isRanked
+      ? `Top ${Math.min(TOP_N, filtered.length)} ${sort === "loved" ? "loved" : "trending"}` +
+        `${soleCat ? " " + CATEGORIES[soleCat].label.toLowerCase() : ""}` +
+        `${weekendOnly ? " this weekend" : ""}`
+      : `${filtered.length} spot${filtered.length === 1 ? "" : "s"}` +
+        `${soleCat ? " · " + CATEGORIES[soleCat].label.toLowerCase() : ""}` +
+        `${weekendOnly ? " this weekend" : " popping up"}`;
 
   const selected = filtered.find((p) => p.id === selectedId)
     ?? places.find((p) => p.id === selectedId)
@@ -233,7 +251,7 @@ export default function MapApp() {
             }}
           >
             <span style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, color: DS.text, flex: 1 }}>
-              {loading ? "Loading the city…" : `${filtered.length} spots ${weekendOnly ? "this weekend" : "popping up"}`}
+              {listHeading}
             </span>
             {isMobile && <span style={{ color: DS.textMut, fontSize: 13 }}>{listOpen ? "▾" : "▴"}</span>}
           </button>
@@ -257,9 +275,20 @@ export default function MapApp() {
                 Nothing here with these filters. Know a spot? Add it!
               </div>
             )}
-            {filtered.map((p) => (
-              <PlaceCard key={p.id} place={p} selected={false} onClick={() => setSelectedId(p.id)} />
+            {visible.map((p, i) => (
+              <PlaceCard
+                key={p.id}
+                place={p}
+                rank={isRanked ? i + 1 : undefined}
+                selected={false}
+                onClick={() => setSelectedId(p.id)}
+              />
             ))}
+            {isRanked && filtered.length > TOP_N && (
+              <div style={{ fontSize: 12, color: DS.textMut, textAlign: "center", padding: "4px 0 6px" }}>
+                +{filtered.length - TOP_N} more on the map
+              </div>
+            )}
           </div>
         </div>
       )}

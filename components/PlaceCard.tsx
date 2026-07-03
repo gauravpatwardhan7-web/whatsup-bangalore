@@ -6,11 +6,20 @@ import type { Place } from "@/lib/types";
 
 interface Props {
   place: Place;
+  rank?: number;
   selected: boolean;
   onClick: () => void;
 }
 
-export default function PlaceCard({ place, selected, onClick }: Props) {
+// Medal tints for the top 3, muted for the rest.
+function rankStyle(rank: number): { bg: string; color: string } {
+  if (rank === 1) return { bg: "#fef3c7", color: "#b45309" };
+  if (rank === 2) return { bg: "#f1f5f9", color: "#64748b" };
+  if (rank === 3) return { bg: "#fef2e8", color: "#c2703d" };
+  return { bg: DS.bg, color: DS.textMut };
+}
+
+export default function PlaceCard({ place, rank, selected, onClick }: Props) {
   const cat = CATEGORIES[place.category];
   const tier = placeTier(place);
   return (
@@ -28,6 +37,16 @@ export default function PlaceCard({ place, selected, onClick }: Props) {
       <div style={{ display: "flex", gap: 12 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {rank !== undefined && (
+              <span style={{
+                flexShrink: 0, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 999,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                fontSize: 11.5, fontWeight: 800, fontFamily: "var(--font-display)",
+                background: rankStyle(rank).bg, color: rankStyle(rank).color,
+              }}>
+                {rank}
+              </span>
+            )}
             <span style={{ fontSize: 18 }}>{cat.emoji}</span>
             <span style={{
               fontFamily: "var(--font-display)", fontSize: 15.5, fontWeight: 700,
