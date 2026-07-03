@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CATEGORIES, DS, FLOAT_SHADOW, placeTier } from "@/lib/ds";
-import { addComment, fetchComments, toggleVote } from "@/lib/data";
+import { addComment, fetchComments, setVote } from "@/lib/data";
 import { formatEventWindow, timeAgo } from "@/lib/format";
 import type { Place, PlaceComment, SessionUser } from "@/lib/types";
 
@@ -38,16 +38,17 @@ export default function PlaceSheet({
     return () => { cancelled = true; };
   }, [place.id]);
 
-  async function handleVote() {
+  async function handleVote(direction: 1 | -1) {
     if (!user) { onSignInNeeded(); return; }
+    const next: -1 | 0 | 1 = place.my_vote === direction ? 0 : direction;
     const optimistic: Place = {
       ...place,
-      voted_by_me: !place.voted_by_me,
-      vote_count: place.vote_count + (place.voted_by_me ? -1 : 1),
+      my_vote: next,
+      vote_count: place.vote_count + (next - place.my_vote),
     };
     onVoteToggled(optimistic);
     try {
-      await toggleVote(place);
+      await setVote(place, direction);
     } catch {
       onVoteToggled(place); // revert
     }
@@ -156,19 +157,41 @@ export default function PlaceSheet({
           </a>
         )}
 
-        {/* vote row */}
+        {/* vote row — up = worth it, down = skip it, net score in the middle */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
-          <button onClick={handleVote} style={{
-            display: "flex", alignItems: "center", gap: 7, padding: "9px 18px",
-            borderRadius: 999, cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
-            border: `1.5px solid ${place.voted_by_me ? DS.accent : DS.borderMd}`,
-            background: place.voted_by_me ? DS.accent : "#fff",
-            color: place.voted_by_me ? "#fff" : DS.text,
+          <div style={{
+            display: "flex", alignItems: "center", borderRadius: 999,
+            border: `1.5px solid ${DS.borderMd}`, overflow: "hidden",
           }}>
-            ▲ {place.voted_by_me ? "Loved it" : "Worth it?"} · {place.vote_count}
-          </button>
+            <button onClick={() => handleVote(1)} title="Worth it" style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "9px 15px", border: "none",
+              cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
+              background: place.my_vote === 1 ? DS.accent : "#fff",
+              color: place.my_vote === 1 ? "#fff" : DS.text,
+            }}>
+              ▲ Worth it
+            </button>
+            <span style={{
+              minWidth: 34, textAlign: "center", padding: "9px 4px", fontSize: 14, fontWeight: 800,
+              fontFamily: "var(--font-display)", background: "#fff",
+              color: place.vote_count < 0 ? "#dc2626" : DS.text,
+              borderLeft: `1px solid ${DS.border}`, borderRight: `1px solid ${DS.border}`,
+            }}>
+              {place.vote_count}
+            </span>
+            <button onClick={() => handleVote(-1)} title="Not worth it" style={{
+              display: "flex", alignItems: "center", gap: 6, padding: "9px 15px", border: "none",
+              cursor: "pointer", fontSize: 14, fontWeight: 700, fontFamily: "inherit",
+              background: place.my_vote === -1 ? "#dc2626" : "#fff",
+              color: place.my_vote === -1 ? "#fff" : DS.textSub,
+            }}>
+              ▼ Skip
+            </button>
+          </div>
           <span style={{ fontSize: 12, color: DS.textMut }}>
-            {place.voted_by_me ? "You vouched for this" : "Been here? Vouch for it"}
+            {place.my_vote === 1 ? "You vouched for this"
+              : place.my_vote === -1 ? "You'd skip this"
+              : "Been here? Weigh in"}
           </span>
         </div>
 

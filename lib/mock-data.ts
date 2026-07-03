@@ -29,7 +29,7 @@ const base = {
   source: "curated" as const,
   created_by: null,
   created_at: daysFromNow(-20),
-  voted_by_me: false,
+  my_vote: 0 as -1 | 0 | 1,
 };
 
 export const MOCK_PLACES: Place[] = [

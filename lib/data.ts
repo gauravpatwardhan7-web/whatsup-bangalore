@@ -52,21 +52,26 @@ export async function fetchPlaces(): Promise<Place[]> {
 }
 
 // Fresh live counts for a single place (used by the realtime refresh).
-export async function fetchPlaceStats(
-  placeId: string
-): Promise<{ vote_count: number; comment_count: number; trending_score: number } | null> {
+export interface PlaceStats {
+  vote_count: number;
+  comment_count: number;
+  my_vote: -1 | 0 | 1;
+  trending_score: number;
+}
+
+export async function fetchPlaceStats(placeId: string): Promise<PlaceStats | null> {
   if (MOCK_MODE) {
     const p = mockPlaces.find((x) => x.id === placeId);
-    return p ? { vote_count: p.vote_count, comment_count: p.comment_count, trending_score: p.trending_score } : null;
+    return p ? { vote_count: p.vote_count, comment_count: p.comment_count, my_vote: p.my_vote, trending_score: p.trending_score } : null;
   }
   const sb = supabaseBrowser();
   const { data, error } = await sb
     .from("places_with_stats")
-    .select("vote_count, comment_count, trending_score")
+    .select("vote_count, comment_count, my_vote, trending_score")
     .eq("id", placeId)
     .single();
   if (error) return null;
-  return data as { vote_count: number; comment_count: number; trending_score: number };
+  return data as PlaceStats;
 }
 
 // Subscribe to all vote/comment changes; calls back with the affected place_id.
@@ -74,40 +79,48 @@ export async function fetchPlaceStats(
 export function subscribeToActivity(onChange: (placeId: string) => void): () => void {
   if (MOCK_MODE) return () => {};
   const sb = supabaseBrowser();
+  // On DELETE, payload.new is an empty object (not null), so `new ?? old`
+  // wrongly picks it — read place_id from whichever side actually has it.
+  const placeIdOf = (payload: { new?: unknown; old?: unknown }): string | undefined => {
+    const n = payload.new as { place_id?: string } | undefined;
+    const o = payload.old as { place_id?: string } | undefined;
+    return n?.place_id ?? o?.place_id;
+  };
   const channel = sb
     .channel("activity")
     .on("postgres_changes", { event: "*", schema: "public", table: "votes" },
-      (payload) => {
-        const row = (payload.new ?? payload.old) as { place_id?: string } | null;
-        if (row?.place_id) onChange(row.place_id);
-      })
+      (payload) => { const id = placeIdOf(payload); if (id) onChange(id); })
     .on("postgres_changes", { event: "*", schema: "public", table: "comments" },
-      (payload) => {
-        const row = (payload.new ?? payload.old) as { place_id?: string } | null;
-        if (row?.place_id) onChange(row.place_id);
-      })
+      (payload) => { const id = placeIdOf(payload); if (id) onChange(id); })
     .subscribe();
   return () => { sb.removeChannel(channel); };
 }
 
-export async function toggleVote(place: Place): Promise<void> {
+// Cast a vote in `direction` (1 = up, -1 = down). Clicking the same direction
+// again toggles it off (back to no vote).
+export async function setVote(place: Place, direction: 1 | -1): Promise<void> {
   if (MOCK_MODE) {
-    mockPlaces = mockPlaces.map((p) =>
-      p.id === place.id
-        ? { ...p, voted_by_me: !p.voted_by_me, vote_count: p.vote_count + (p.voted_by_me ? -1 : 1) }
-        : p
-    );
+    mockPlaces = mockPlaces.map((p) => {
+      if (p.id !== place.id) return p;
+      const next: -1 | 0 | 1 = p.my_vote === direction ? 0 : direction;
+      return { ...p, my_vote: next, vote_count: p.vote_count + (next - p.my_vote) };
+    });
     return;
   }
   const sb = supabaseBrowser();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) throw new Error("not signed in");
-  if (place.voted_by_me) {
+  if (place.my_vote === direction) {
+    // Toggle off.
     const { error } = await sb.from("votes").delete().eq("place_id", place.id).eq("user_id", user.id);
     if (error) throw error;
   } else {
-    const { error } = await sb.from("votes").insert({ place_id: place.id, user_id: user.id });
-    if (error && error.code !== "23505") throw error; // ignore double-tap duplicates
+    // Set/flip direction (upsert on the (place_id, user_id) primary key).
+    const { error } = await sb.from("votes").upsert(
+      { place_id: place.id, user_id: user.id, value: direction },
+      { onConflict: "place_id,user_id" }
+    );
+    if (error) throw error;
   }
 }
 
@@ -122,7 +135,7 @@ export async function submitPlace(input: NewPlaceInput, user: SessionUser): Prom
       created_at: new Date().toISOString(),
       vote_count: 0,
       comment_count: 0,
-      voted_by_me: false,
+      my_vote: 0,
       trending_score: 0,
     }, ...mockPlaces];
     return "approved";

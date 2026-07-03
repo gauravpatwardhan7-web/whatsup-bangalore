@@ -17,9 +17,9 @@ export interface Place {
   source: "curated" | "user" | "reddit" | "events_feed";
   created_by: string | null;
   created_at: string;
-  vote_count: number;
+  vote_count: number;      // net score = upvotes − downvotes
   comment_count: number;
-  voted_by_me: boolean;
+  my_vote: -1 | 0 | 1;     // this user's vote direction (0 = none)
   trending_score: number;
 }
 

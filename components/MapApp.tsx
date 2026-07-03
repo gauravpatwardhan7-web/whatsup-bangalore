@@ -60,7 +60,7 @@ export default function MapApp() {
         if (stats) {
           setPlaces((prev) => prev.map((p) =>
             p.id === placeId
-              ? { ...p, vote_count: stats.vote_count, comment_count: stats.comment_count, trending_score: stats.trending_score }
+              ? { ...p, vote_count: stats.vote_count, comment_count: stats.comment_count, my_vote: stats.my_vote, trending_score: stats.trending_score }
               : p
           ));
         }

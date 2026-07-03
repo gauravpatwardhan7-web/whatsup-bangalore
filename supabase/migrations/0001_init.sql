@@ -66,6 +66,7 @@ create table public.places (
 create table public.votes (
   place_id   uuid not null references public.places (id) on delete cascade,
   user_id    uuid not null references public.profiles (id) on delete cascade,
+  value      smallint not null default 1 check (value in (-1, 1)),  -- +1 up / -1 down
   created_at timestamptz not null default now(),
   primary key (place_id, user_id)
 );
@@ -102,19 +103,19 @@ create or replace view public.places_with_stats
 with (security_invoker = on) as
 select
   p.*,
-  coalesce(v.vote_count, 0)::int    as vote_count,
+  coalesce(v.score, 0)::int         as vote_count,   -- net = upvotes − downvotes
   coalesce(c.comment_count, 0)::int as comment_count,
-  exists (
-    select 1 from public.votes me
+  coalesce((
+    select value from public.votes me
     where me.place_id = p.id and me.user_id = auth.uid()
-  ) as voted_by_me,
+  ), 0)::int                        as my_vote,       -- this user's direction (0 = none)
   round((
     coalesce(v.decayed, 0) + 1.5 * coalesce(c.decayed, 0) + coalesce(m.decayed, 0)
   )::numeric, 3)::double precision  as trending_score
 from public.places p
 left join lateral (
-  select count(*) as vote_count,
-         sum(exp(-extract(epoch from now() - created_at) / (86400.0 * 7))) as decayed
+  select sum(value) as score,
+         sum(value * exp(-extract(epoch from now() - created_at) / (86400.0 * 7))) as decayed
   from public.votes where place_id = p.id and created_at > now() - interval '14 days'
 ) v on true
 left join lateral (
@@ -157,6 +158,8 @@ create policy "votes readable by everyone"
   on public.votes for select using (true);
 create policy "users vote as themselves"
   on public.votes for insert to authenticated with check (user_id = auth.uid());
+create policy "users change own vote"
+  on public.votes for update using (user_id = auth.uid()) with check (user_id = auth.uid());
 create policy "users remove own vote"
   on public.votes for delete using (user_id = auth.uid());
 

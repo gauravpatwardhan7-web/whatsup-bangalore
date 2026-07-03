@@ -76,8 +76,8 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
             display: "flex", gap: 14, marginTop: 8, marginLeft: 26,
             fontSize: 12.5, color: DS.textMut, fontWeight: 600,
           }}>
-            <span style={{ color: place.voted_by_me ? DS.accent : DS.textMut }}>
-              ▲ {place.vote_count}
+            <span style={{ color: place.my_vote === 1 ? DS.accent : place.my_vote === -1 ? "#dc2626" : DS.textMut }}>
+              {place.my_vote === -1 ? "▼" : "▲"} {place.vote_count}
             </span>
             <span>💬 {place.comment_count}</span>
           </div>
