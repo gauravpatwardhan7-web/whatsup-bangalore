@@ -41,12 +41,13 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 - Locate-me button on map (geolocate + dot).
 - Live "buzz" tiers (Quiet→Warming up→Trending→Buzzing→On fire) computed from live counts; drives badge + pin glow + sort.
 - Supabase Realtime wiring (code done; needs `0003_realtime.sql` run to activate).
+- Submit guardrails, first slice: duplicate warning (~75m + fuzzy title, warn-and-allow), Bengaluru bounding-box check, event-date validation, clearer description label. (`lib/guardrails.ts`, unit-sanity-checked; UI flow needs a signed-in manual pass.)
 
 ## Current focus
 - **Verify live buzz tiers + realtime end to end.** After `0003_realtime.sql` is run: open the app in two tabs, vote in one, confirm the other's count/badge/glow update with no refresh. Confirm removing a vote downgrades the tier instantly.
 
 ## Next up (candidates — see BACKLOG.md for detail)
-1. **Guardrails, first slice:** duplicate-detection warning on submit (~75m + fuzzy title) + a "report" button. (`BACKLOG.md` → Guardrails)
+1. **Guardrails, next slice:** "report" button (duplicate / wrong location / closed) → admin queue; needs a `reports` table migration. (`BACKLOG.md` → Guardrails)
 2. **Account / activity hub:** my comments/votes/submissions + "been there" collectibles. (`BACKLOG.md`)
 3. **Phase 2 — Reddit ingestion:** GitHub Action → r/bangalore → extract places → `mentions` table feeds trending.
 4. Deploy to Vercel (add env vars + Supabase redirect URL for the prod domain).
@@ -61,3 +62,4 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 
 ## Session log
 - 2026-07-03 — MVP built; Supabase + Google auth connected live; photos on all spots; locate-me; live buzz tiers + realtime code; spec-kit + this tracker added. Pending: run `0003_realtime.sql`, verify realtime.
+- 2026-07-03 (later) — Guardrails slice 1: dup-detection warning on submit, BLR bounding-box check, event-date validation, description-label clarity. Pending: signed-in manual pass of the dup-warning flow.

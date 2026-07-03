@@ -124,6 +124,36 @@ export async function setVote(place: Place, direction: 1 | -1): Promise<void> {
   }
 }
 
+// Places within ~radiusM of a point (bounding-box approximation), used for
+// duplicate detection on submit. Excludes rejected; RLS already limits which
+// pending rows are visible.
+export interface NearbyPlace {
+  id: string;
+  title: string;
+  lat: number;
+  lng: number;
+  status: Place["status"];
+}
+
+export async function fetchNearbyPlaces(lat: number, lng: number, radiusM = 75): Promise<NearbyPlace[]> {
+  const dLat = radiusM / 111_320; // metres per degree latitude
+  const dLng = radiusM / (111_320 * Math.cos((lat * Math.PI) / 180));
+  const inBox = (p: { lat: number; lng: number }) =>
+    Math.abs(p.lat - lat) <= dLat && Math.abs(p.lng - lng) <= dLng;
+  if (MOCK_MODE) {
+    return mockPlaces.filter((p) => p.status !== "rejected" && inBox(p));
+  }
+  const sb = supabaseBrowser();
+  const { data, error } = await sb
+    .from("places")
+    .select("id, title, lat, lng, status")
+    .neq("status", "rejected")
+    .gte("lat", lat - dLat).lte("lat", lat + dLat)
+    .gte("lng", lng - dLng).lte("lng", lng + dLng);
+  if (error) throw error;
+  return (data ?? []) as NearbyPlace[];
+}
+
 export async function submitPlace(input: NewPlaceInput, user: SessionUser): Promise<"approved" | "pending"> {
   if (MOCK_MODE) {
     mockPlaces = [{

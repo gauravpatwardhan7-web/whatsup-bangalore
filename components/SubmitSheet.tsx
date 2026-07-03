@@ -3,7 +3,8 @@
 import { useRef, useState } from "react";
 import { CATEGORIES, DS, FLOAT_SHADOW, type Category } from "@/lib/ds";
 import { searchBangalore, type GeocodeResult } from "@/lib/geocode";
-import { submitPlace, uploadImage } from "@/lib/data";
+import { fetchNearbyPlaces, submitPlace, uploadImage, type NearbyPlace } from "@/lib/data";
+import { findDuplicate, isInBengaluru, validateEventDates } from "@/lib/guardrails";
 import type { NewPlaceInput, SessionUser } from "@/lib/types";
 
 interface Props {
@@ -40,6 +41,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dupCandidate, setDupCandidate] = useState<NearbyPlace | null>(null);
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -101,13 +103,33 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
     );
   }
 
-  async function handleSubmit() {
+  // skipDupCheck = true when the user pressed "Add anyway" on the dup warning.
+  async function handleSubmit(skipDupCheck = false) {
     setError(null);
+    if (!skipDupCheck) setDupCandidate(null);
     if (!title.trim()) { setError("Give it a name."); return; }
     if (!location) { setError("Pick a location — search or use the map center."); return; }
-    if (category === "event" && !eventStart) { setError("Events need a start date."); return; }
+    if (!isInBengaluru(location.lat, location.lng)) {
+      setError("That pin is outside Bengaluru — search again or move the map into the city.");
+      return;
+    }
+    if (category === "event") {
+      if (!eventStart) { setError("Events need a start date."); return; }
+      const dateError = validateEventDates(eventStart, eventEnd);
+      if (dateError) { setError(dateError); return; }
+    }
     setSaving(true);
     try {
+      if (!skipDupCheck) {
+        // Warn-and-allow: same-ish name within ~75m → ask before saving.
+        const nearby = await fetchNearbyPlaces(location.lat, location.lng).catch(() => []);
+        const dup = findDuplicate(title.trim(), nearby);
+        if (dup) {
+          setDupCandidate(dup);
+          setSaving(false);
+          return;
+        }
+      }
       const input: NewPlaceInput = {
         title: title.trim(),
         description: description.trim(),
@@ -216,7 +238,12 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
           </>
         )}
 
-        <label style={labelStyle}>Why is it cool?</label>
+        <label style={labelStyle}>
+          Why is it cool?{" "}
+          <span style={{ fontWeight: 500, color: DS.textMut }}>
+            (becomes the spot&rsquo;s description — you can comment on it later)
+          </span>
+        </label>
         <textarea style={{ ...inputStyle, minHeight: 80, resize: "none", lineHeight: 1.5 }}
           value={description} onChange={(e) => setDescription(e.target.value)}
           placeholder="What should people know before they go?" />
@@ -272,6 +299,32 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
           </div>
         )}
 
+        {dupCandidate && (
+          <div style={{
+            marginTop: 12, padding: "10px 12px", borderRadius: 10, fontSize: 12.5,
+            background: "#fffbeb", border: "1px solid #fcd34d", color: "#92400e", lineHeight: 1.5,
+          }}>
+            <strong>&ldquo;{dupCandidate.title}&rdquo; already exists right there.</strong>
+            {" "}Is this the same place? If it&rsquo;s genuinely different, add it anyway.
+            <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
+              <button onClick={() => handleSubmit(true)} disabled={saving} style={{
+                padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12,
+                fontWeight: 700, fontFamily: "inherit", border: "1.5px solid #f59e0b",
+                background: "#fff", color: "#92400e",
+              }}>
+                It&rsquo;s different — add anyway
+              </button>
+              <button onClick={() => setDupCandidate(null)} style={{
+                padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12,
+                fontWeight: 600, fontFamily: "inherit", border: "none",
+                background: "rgba(0,0,0,0.06)", color: DS.textSub,
+              }}>
+                Never mind
+              </button>
+            </div>
+          </div>
+        )}
+
         {error && (
           <div style={{
             marginTop: 12, padding: "9px 12px", borderRadius: 10, fontSize: 12.5,
@@ -281,7 +334,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
           </div>
         )}
 
-        <button onClick={handleSubmit} disabled={saving} style={{
+        <button onClick={() => handleSubmit()} disabled={saving} style={{
           width: "100%", marginTop: 16, padding: "12px", borderRadius: 12, border: "none",
           background: saving ? DS.borderMd : DS.accent, color: "#fff", fontSize: 14.5,
           fontWeight: 700, cursor: "pointer", fontFamily: "inherit",

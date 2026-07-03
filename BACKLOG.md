@@ -8,7 +8,7 @@ The MVP trusts users. A public, community-enriched map needs abuse handling or i
 
 ### Duplicate / conflicting spots
 The one that prompted this. Two people add the same place (accidentally, or deliberately to spam/vandalize).
-- **Detect on submit**: before saving, check for an existing place within ~75m *and* fuzzy-matching title → warn "La Casa already exists nearby — is this it?" with a link to the existing one. Cheap win, kills most accidental dupes.
+- ✅ **Detect on submit** (done 2026-07-03): checks for an existing place within ~75m with a fuzzy-matching title → warn-and-allow ("add anyway" to override). `lib/guardrails.ts` + `fetchNearbyPlaces` in `lib/data.ts`.
 - **Merge tooling (admin)**: pick a canonical place, fold votes/comments/photos from the duplicate into it, redirect/delete the other. Needs a `merged_into` column or a merge RPC.
 - **Community flag**: "Report as duplicate / wrong location / closed" on the detail sheet → goes to an admin queue.
 - Decide: auto-block near-exact dupes vs. allow-with-warning vs. always-allow-then-merge. (Leaning: warn-and-allow, then admin merge.)
@@ -26,9 +26,9 @@ The one that prompted this. Two people add the same place (accidentally, or deli
 
 ### Bad / malicious location data
 - Pin dropped in the wrong place, offshore, or outside Bengaluru entirely (map-center drop makes this easy).
-- Validate lat/lng is inside a Bengaluru bounding box on submit; reject/flag outliers.
+- ✅ Validate lat/lng is inside a Bengaluru bounding box on submit (done 2026-07-03, `isInBengaluru` in `lib/guardrails.ts`).
 - Nominatim/geocoding can return nothing or wrong results — handle empty + let user adjust the pin.
-- Events with past dates, end-before-start, or absurd future dates → validate.
+- ✅ Events with past dates, end-before-start, or absurd future dates → validated on submit (done 2026-07-03, `validateEventDates`).
 
 ### Auth / account edge cases
 - Google returns no email, or a user revokes access. `handle_new_user` assumes name/email exist — harden the trigger.
@@ -55,7 +55,7 @@ A personal page collecting everything a signed-in user has done, so activity isn
   - **In the account**: a "My Bengaluru" grid (12 spots visited, categories covered, streaks).
   - Gamify later: badges for "visited 5 breweries", "all of Indiranagar", etc. → the "collectibles" angle.
 - Data: new `visits` table (place_id, user_id, visited_at) mirrors `votes` shape + RLS; the "my activity" view is just filtered queries on existing comments/votes/places by created_by/user_id. Cheap.
-- UX nudge that surfaced this: in the submit form, the "Why is it cool?" description field and the comment box are easy to confuse — consider clearer labels/help text.
+- ✅ UX nudge that surfaced this: the "Why is it cool?" label now clarifies it becomes the spot's description, distinct from comments (done 2026-07-03).
 
 ## Already-planned phases (from the original plan)
 
