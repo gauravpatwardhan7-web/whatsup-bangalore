@@ -26,6 +26,7 @@ export default function PlaceSheet({
   const comments = loaded?.placeId === place.id ? loaded.rows : null;
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
+  const [postError, setPostError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,6 +57,7 @@ export default function PlaceSheet({
     if (!user) { onSignInNeeded(); return; }
     const body = draft.trim();
     if (!body || posting) return;
+    setPostError(null);
     setPosting(true);
     try {
       const comment = await addComment(place.id, body, user);
@@ -65,6 +67,9 @@ export default function PlaceSheet({
       }));
       setDraft("");
       onCommentAdded({ ...place, comment_count: place.comment_count + 1 });
+    } catch {
+      // Never swallow a comment silently — keep the text and tell the user.
+      setPostError("Couldn't post that — check your connection and try again.");
     } finally {
       setPosting(false);
     }
@@ -209,6 +214,11 @@ export default function PlaceSheet({
               Post
             </button>
           </div>
+          {postError && (
+            <div style={{ fontSize: 12, color: "#dc2626", marginTop: 6, fontWeight: 600 }}>
+              {postError}
+            </div>
+          )}
         </div>
       </div>
     </div>
