@@ -3,7 +3,7 @@
 The one file to read when starting a session and update before ending one. If this
 disagrees with memory or chat, **this file wins**. Keep it short and current.
 
-**Last updated:** 2026-07-03 · **Phase:** MVP live on Supabase
+**Last updated:** 2026-07-04 · **Phase:** MVP live on Supabase
 
 ---
 
@@ -35,7 +35,8 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 ## Done (working & verified)
 - Map feed (MapLibre) with category pins, list panel, sort (Trending/Newest/Most loved), filters (category + "This weekend"), mobile bottom sheet.
 - Google sign-in; avatar in header (referrer-safe).
-- Voting (optimistic) + comments, both live to Supabase; comment failures surface an error instead of vanishing.
+- Voting (optimistic, up + down) + comments, both live to Supabase; comment failures surface an error instead of vanishing.
+- Ranked Top 10 list per active filter (e.g. "Top 10 trending drinks").
 - Submit flow: Nominatim search / drop-pin / **use my current location**, photo upload, event dates. Non-admin → pending.
 - Admin moderation page `/admin` (approve/reject/delete).
 - Locate-me button on map (geolocate + dot).
@@ -63,3 +64,4 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 ## Session log
 - 2026-07-03 — MVP built; Supabase + Google auth connected live; photos on all spots; locate-me; live buzz tiers + realtime code; spec-kit + this tracker added. Pending: run `0003_realtime.sql`, verify realtime.
 - 2026-07-03 (later) — Guardrails slice 1: dup-detection warning on submit, BLR bounding-box check, event-date validation, description-label clarity. Pending: signed-in manual pass of the dup-warning flow.
+- 2026-07-04 — Dev-env fixes: pinned `turbopack.root` (stray `~/package-lock.json` broke workspace-root inference), launch.json `autoPort` so preview servers don't fight over port 3000. Verified app serves clean after a `.next` cache wipe. No product changes.
