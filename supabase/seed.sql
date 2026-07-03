@@ -77,3 +77,26 @@ values
   ('Corner House Ice Cream',
    'Death by Chocolate. That''s it. That''s the description.',
    'food', 12.9668, 77.6069, 'Residency Road', 'Richmond Town', null, null, null, 'approved', 'curated');
+
+-- Placeholder photos for the curated seeds (replace with real pics via the
+-- dashboard or future admin edit — picsum images are stable per seed).
+update public.places set image_url = 'https://picsum.photos/seed/' || seed || '/600/400'
+from (values
+  ('Toit Brewpub', 'toit'),
+  ('VV Puram Food Street', 'vvpuram'),
+  ('Blossom Book House', 'blossom'),
+  ('Cubbon Park', 'cubbon'),
+  ('Lalbagh Botanical Garden', 'lalbagh'),
+  ('The Rameshwaram Cafe', 'rameshwaram'),
+  ('Museum of Art & Photography (MAP)', 'mapmuseum'),
+  ('Byg Brewski Brewing Company', 'bygbrewski'),
+  ('Commercial Street', 'commercial'),
+  ('Nandi Hills Sunrise', 'nandihills'),
+  ('Church Street Social', 'churchstreet'),
+  ('The Bier Library', 'bierlibrary'),
+  ('Ranga Shankara', 'rangashankara'),
+  ('Sunday Soul Sante', 'soulsante'),
+  ('Gig Night at Fandom', 'fandom'),
+  ('Corner House Ice Cream', 'cornerhouse')
+) as pics(title, seed)
+where places.title = pics.title and places.source = 'curated';

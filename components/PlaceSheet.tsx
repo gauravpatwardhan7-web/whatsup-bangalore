@@ -123,11 +123,21 @@ export default function PlaceSheet({
       </div>
 
       <div style={{ overflowY: "auto", padding: "14px 16px" }}>
-        {place.image_url && (
+        {place.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={place.image_url} alt={place.title} style={{
-            width: "100%", borderRadius: 12, marginBottom: 12, maxHeight: 200, objectFit: "cover",
+            width: "100%", height: 180, borderRadius: 12, marginBottom: 12, objectFit: "cover",
+            border: `1px solid ${DS.border}`,
           }} />
+        ) : (
+          <div style={{
+            width: "100%", height: 110, borderRadius: 12, marginBottom: 12,
+            background: `linear-gradient(135deg, ${cat.tint}, ${cat.color}22)`,
+            border: `1px solid ${DS.border}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
+          }}>
+            <span style={{ fontSize: 44, filter: "saturate(1.2)" }}>{cat.emoji}</span>
+          </div>
         )}
         <p style={{ fontSize: 14, lineHeight: 1.55, color: DS.text, margin: 0 }}>
           {place.description}

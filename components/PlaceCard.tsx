@@ -65,12 +65,20 @@ export default function PlaceCard({ place, selected, onClick }: Props) {
             <span>💬 {place.comment_count}</span>
           </div>
         </div>
-        {place.image_url && (
+        {place.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={place.image_url} alt="" loading="lazy" style={{
             width: 72, height: 72, borderRadius: 12, objectFit: "cover",
             flexShrink: 0, alignSelf: "center", border: `1px solid ${DS.border}`,
           }} />
+        ) : (
+          <div style={{
+            width: 72, height: 72, borderRadius: 12, flexShrink: 0, alignSelf: "center",
+            background: cat.tint, border: `1px solid ${DS.border}`,
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28,
+          }}>
+            {cat.emoji}
+          </div>
         )}
       </div>
     </button>
