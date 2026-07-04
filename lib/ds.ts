@@ -56,7 +56,8 @@ const BUZZ_TIERS: (BuzzTier & { min: number })[] = [
   { min: 9,  level: 3, label: "Buzzing",    badgeEmoji: "⚡", color: "#ffffff", badgeBg: "#ea580c", badgeBorder: "#ea580c", pinClass: "pin-l3", pinColor: "234,88,12" },
   { min: 4,  level: 2, label: "Trending",   badgeEmoji: "↗",  color: "#ea580c", badgeBg: "#fff7ed", badgeBorder: "#fed7aa", pinClass: "pin-l2", pinColor: "234,88,12" },
   { min: 1.5,level: 1, label: "Warming up", badgeEmoji: "•",  color: "#b45309", badgeBg: "#fffbeb", badgeBorder: "#fde68a", pinClass: "pin-l1", pinColor: "217,119,6" },
-  { min: 0,  level: 0, label: null,         badgeEmoji: "",   color: "",        badgeBg: "",        badgeBorder: "",        pinClass: "",       pinColor: "" },
+  // -Infinity floor: net score can go negative now that downvotes exist.
+  { min: -Infinity, level: 0, label: null,  badgeEmoji: "",   color: "",        badgeBg: "",        badgeBorder: "",        pinClass: "",       pinColor: "" },
 ];
 
 export function buzzTier(score: number): BuzzTier {
