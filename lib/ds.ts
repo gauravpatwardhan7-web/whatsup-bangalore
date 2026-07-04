@@ -7,8 +7,8 @@ export const DS = {
   text:     "#1c1917",   // near-black
   textSub:  "#78716c",   // stone-500
   textMut:  "#a8a29e",   // stone-400
-  accent:   "#c4622d",   // terracotta
-  accentLt: "#e07a4a",   // lighter terracotta
+  accent:   "#5e7d58",   // sage green
+  accentLt: "#7d9c76",   // lighter sage
 } as const;
 
 export const CARD_SHADOW = "0 2px 8px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)";
@@ -24,8 +24,8 @@ export const CATEGORIES: Record<Category, { label: string; emoji: string; color:
   outdoors:    { label: "Outdoors",    emoji: "🌳", color: "#16a34a", tint: "#f5faf5" },
   art_culture: { label: "Art & Culture", emoji: "🎭", color: "#7c3aed", tint: "#f8f5fd" },
   shopping:    { label: "Shopping",    emoji: "🛍️", color: "#2563eb", tint: "#f3f8fd" },
-  nightlife:   { label: "Nightlife",   emoji: "🌙", color: "#db2777", tint: "#fdf6f3" },
-  experience:  { label: "Experience",  emoji: "✨", color: "#c4622d", tint: "#fdf6f3" },
+  nightlife:   { label: "Nightlife",   emoji: "🌙", color: "#db2777", tint: "#fdf2f7" },
+  experience:  { label: "Experience",  emoji: "✨", color: "#5e7d58", tint: "#eff3ec" },
   event:       { label: "Event",       emoji: "📅", color: "#dc2626", tint: "#fef2f2" },
 };
 
@@ -54,7 +54,7 @@ export interface BuzzTier {
 const BUZZ_TIERS: (BuzzTier & { min: number })[] = [
   { min: 18, level: 4, label: "On fire",    badgeEmoji: "🔥", color: "#ffffff", badgeBg: "#dc2626", badgeBorder: "#dc2626", pinClass: "pin-l4", pinColor: "220,38,38" },
   { min: 9,  level: 3, label: "Buzzing",    badgeEmoji: "⚡", color: "#ffffff", badgeBg: "#ea580c", badgeBorder: "#ea580c", pinClass: "pin-l3", pinColor: "234,88,12" },
-  { min: 4,  level: 2, label: "Trending",   badgeEmoji: "↗",  color: "#c4622d", badgeBg: "#fdf6f3", badgeBorder: "#f0ddd5", pinClass: "pin-l2", pinColor: "196,98,45" },
+  { min: 4,  level: 2, label: "Trending",   badgeEmoji: "↗",  color: "#ea580c", badgeBg: "#fff7ed", badgeBorder: "#fed7aa", pinClass: "pin-l2", pinColor: "234,88,12" },
   { min: 1.5,level: 1, label: "Warming up", badgeEmoji: "•",  color: "#b45309", badgeBg: "#fffbeb", badgeBorder: "#fde68a", pinClass: "pin-l1", pinColor: "217,119,6" },
   { min: 0,  level: 0, label: null,         badgeEmoji: "",   color: "",        badgeBg: "",        badgeBorder: "",        pinClass: "",       pinColor: "" },
 ];
