@@ -1,7 +1,7 @@
 /**
  * Phase 2 — Reddit ingestion ("the map lights up on its own").
  *
- * Pulls hot posts from r/bangalore, uses Claude to extract specific named
+ * Pulls hot posts from r/bangalore, uses Gemini to extract specific named
  * places/events, geocodes them inside Bengaluru, matches against existing
  * places (or creates a `pending` one), and records a row in `mentions` — which
  * feeds `trending_score` via the time-decayed view in 0001_init.sql.
@@ -13,11 +13,11 @@
  *   npx tsx scripts/ingest-reddit.ts --dry-run
  *
  * Env: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY,
- *      ANTHROPIC_API_KEY.
+ *      GEMINI_API_KEY (or GOOGLE_API_KEY), optional GEMINI_MODEL.
  */
 
 import { fileURLToPath } from "node:url";
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
 import { CATEGORIES, type Category } from "../lib/ds";
 import { searchBangalore } from "../lib/geocode";
@@ -26,6 +26,7 @@ import { isInBengaluru, findDuplicate } from "../lib/guardrails";
 const SUBREDDIT = "bangalore";
 const HOT_LIMIT = 40;
 const CHUNK_SIZE = 8; // posts per LLM call
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const MATCH_RADIUS_M = 200; // an extracted place within this of an existing one, same-ish name → merge
 const USER_AGENT = "whatsup-bangalore-ingest/1.0 (https://github.com/gauravpatwardhan7-web/whatsup-bangalore)";
 const CATEGORY_KEYS = Object.keys(CATEGORIES) as Category[];
@@ -133,27 +134,26 @@ async function fetchHotPosts(): Promise<RedditPost[]> {
 }
 
 const EXTRACTION_SCHEMA = {
-  type: "object",
-  additionalProperties: false,
+  type: Type.OBJECT,
   properties: {
     places: {
-      type: "array",
+      type: Type.ARRAY,
       items: {
-        type: "object",
-        additionalProperties: false,
+        type: Type.OBJECT,
         properties: {
-          post_number: { type: "integer" },
-          name: { type: "string" },
-          category: { type: "string", enum: CATEGORY_KEYS },
-          reason: { type: "string" },
-          is_event: { type: "boolean" },
+          post_number: { type: Type.INTEGER },
+          name: { type: Type.STRING },
+          category: { type: Type.STRING, enum: CATEGORY_KEYS },
+          reason: { type: Type.STRING },
+          is_event: { type: Type.BOOLEAN },
         },
         required: ["post_number", "name", "category", "reason", "is_event"],
+        propertyOrdering: ["post_number", "name", "category", "reason", "is_event"],
       },
     },
   },
   required: ["places"],
-} as const;
+};
 
 const SYSTEM_PROMPT = `You extract specific, real, visitable places and events in Bengaluru (Bangalore), India from Reddit posts, to plot on a local map.
 
@@ -163,25 +163,27 @@ Do NOT extract: general city discussion, complaints, traffic/civic rants, questi
 
 For each, choose the single best category from the allowed list, write a one-sentence reason drawn from the post about why it's notable, and set is_event=true only for time-bound events. post_number is the number shown before the post. If a post yields no specific place, include nothing for it. Deduplicate within a post.`;
 
-async function extractCandidates(anthropic: Anthropic, posts: RedditPost[], baseIndex: number): Promise<Candidate[]> {
+async function extractCandidates(ai: GoogleGenAI, posts: RedditPost[], baseIndex: number): Promise<Candidate[]> {
   const numbered = posts
     .map((p, i) => `[${baseIndex + i}] ${p.title}${p.selftext ? `\n${p.selftext}` : ""}`)
     .join("\n\n");
 
-  const resp = await anthropic.messages.create({
-    model: "claude-opus-4-8",
-    max_tokens: 4096,
-    system: SYSTEM_PROMPT,
-    messages: [{ role: "user", content: `Posts:\n\n${numbered}` }],
-    output_config: { format: { type: "json_schema", schema: EXTRACTION_SCHEMA } },
-  } as Anthropic.MessageCreateParamsNonStreaming);
+  const resp = await ai.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: `Posts:\n\n${numbered}`,
+    config: {
+      systemInstruction: SYSTEM_PROMPT,
+      responseMimeType: "application/json",
+      responseSchema: EXTRACTION_SCHEMA,
+      temperature: 0,
+    },
+  });
 
-  if (resp.stop_reason === "refusal") {
-    console.warn("  extraction refused for a chunk — skipping it");
+  const text = resp.text;
+  if (!text) {
+    console.warn("  extraction returned no text for a chunk (blocked/empty) — skipping it");
     return [];
   }
-  const text = resp.content.find((b): b is Anthropic.TextBlock => b.type === "text")?.text;
-  if (!text) return [];
   try {
     const parsed = JSON.parse(text) as { places?: Candidate[] };
     return parsed.places ?? [];
@@ -210,15 +212,15 @@ async function main() {
   const dryRunFlag = process.argv.includes("--dry-run");
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
 
   const canWrite = Boolean(supabaseUrl && serviceKey);
-  const canExtract = Boolean(anthropicKey);
+  const canExtract = Boolean(geminiKey);
   const dryRun = dryRunFlag || !canWrite || !canExtract;
 
   console.log(`Reddit ingestion — ${dryRun ? "DRY RUN (no writes)" : "LIVE"}`);
   if (dryRun && !dryRunFlag) {
-    if (!canExtract) console.log("  (ANTHROPIC_API_KEY unset → extraction skipped)");
+    if (!canExtract) console.log("  (GEMINI_API_KEY unset → extraction skipped)");
     if (!canWrite) console.log("  (Supabase service-role env unset → writes skipped)");
   }
 
@@ -249,17 +251,18 @@ async function main() {
     return;
   }
 
-  const anthropic = new Anthropic();
+  const ai = new GoogleGenAI({ apiKey: geminiKey });
   const chunks = chunk(fresh, CHUNK_SIZE);
   const candidates: { cand: Candidate; post: RedditPost }[] = [];
   let base = 0;
   for (const group of chunks) {
-    const extracted = await extractCandidates(anthropic, group, base);
+    const extracted = await extractCandidates(ai, group, base);
     for (const c of extracted) {
       const post = fresh[c.post_number];
       if (post) candidates.push({ cand: c, post });
     }
     base += group.length;
+    await sleep(1000); // stay well under free-tier RPM limits
   }
   console.log(`Extracted ${candidates.length} candidate place(s).`);
 
