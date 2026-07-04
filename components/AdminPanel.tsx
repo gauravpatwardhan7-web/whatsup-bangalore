@@ -57,7 +57,7 @@ export default function AdminPanel() {
       <div style={{ display: "flex", gap: 6, marginBottom: 18 }}>
         {(["pending", "approved", "rejected"] as Tab[]).map((t) => (
           <button key={t} onClick={() => setTab(t)} style={{
-            padding: "7px 14px", borderRadius: 999, cursor: "pointer", fontSize: 13,
+            padding: "7px 14px", borderRadius: 5, cursor: "pointer", fontSize: 13,
             fontWeight: 700, fontFamily: "inherit", textTransform: "capitalize",
             border: `1.5px solid ${tab === t ? DS.accent : DS.border}`,
             background: tab === t ? "#eff3ec" : "#fff",
@@ -76,7 +76,7 @@ export default function AdminPanel() {
         const cat = CATEGORIES[p.category];
         return (
           <div key={p.id} style={{
-            background: "#fff", border: `1px solid ${DS.border}`, borderRadius: 16,
+            background: "#fff", border: `1px solid ${DS.border}`, borderRadius: 8,
             padding: "14px 16px", marginBottom: 10, boxShadow: CARD_SHADOW,
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -134,7 +134,7 @@ function ActionBtn({ color, onClick, children }: {
 }) {
   return (
     <button onClick={onClick} style={{
-      padding: "6px 13px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+      padding: "6px 13px", borderRadius: 5, cursor: "pointer", fontSize: 12.5,
       fontWeight: 700, fontFamily: "inherit", border: `1.5px solid ${color}55`,
       background: "#fff", color,
     }}>

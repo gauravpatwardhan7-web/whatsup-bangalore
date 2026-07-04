@@ -29,7 +29,7 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
         display: "block", width: "100%", textAlign: "left",
         background: selected ? cat.tint : DS.card,
         border: `1.5px solid ${selected ? cat.color : DS.border}`,
-        borderRadius: 16, padding: "12px 14px", marginBottom: 10,
+        borderRadius: 8, padding: "12px 14px", marginBottom: 10,
         boxShadow: CARD_SHADOW, cursor: "pointer",
         fontFamily: "inherit",
       }}
@@ -39,7 +39,7 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {rank !== undefined && (
               <span style={{
-                flexShrink: 0, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 10,
+                flexShrink: 0, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 5,
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
                 fontSize: 11.5, fontWeight: 800, fontFamily: "var(--font-display)",
                 background: rankStyle(rank).bg, color: rankStyle(rank).color,
@@ -56,7 +56,7 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
             </span>
             {tier.label && (
               <span style={{
-                fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 10,
+                fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 5,
                 background: tier.badgeBg, color: tier.color,
                 border: `1px solid ${tier.badgeBorder}`, whiteSpace: "nowrap",
               }}>
@@ -85,12 +85,12 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
         {place.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={place.image_url} alt="" loading="lazy" style={{
-            width: 72, height: 72, borderRadius: 12, objectFit: "cover",
+            width: 72, height: 72, borderRadius: 6, objectFit: "cover",
             flexShrink: 0, alignSelf: "center", border: `1px solid ${DS.border}`,
           }} />
         ) : (
           <div style={{
-            width: 72, height: 72, borderRadius: 12, flexShrink: 0, alignSelf: "center",
+            width: 72, height: 72, borderRadius: 6, flexShrink: 0, alignSelf: "center",
             background: cat.tint, border: `1px solid ${DS.border}`,
             display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28,
           }}>

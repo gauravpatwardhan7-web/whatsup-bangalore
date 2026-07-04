@@ -82,7 +82,7 @@ export default function PlaceSheet({
       ...(isMobile
         ? { left: 8, right: 8, bottom: 8, maxHeight: "72dvh" }
         : { top: 74, left: 12, width: 400, maxHeight: "calc(100dvh - 90px)" }),
-      background: DS.card, borderRadius: 20, boxShadow: FLOAT_SHADOW,
+      background: DS.card, borderRadius: 10, boxShadow: FLOAT_SHADOW,
       border: `1px solid ${DS.border}`, zIndex: 47,
       display: "flex", flexDirection: "column", overflow: "hidden",
     }}>
@@ -102,7 +102,7 @@ export default function PlaceSheet({
             </div>
           </div>
           <button onClick={onClose} aria-label="Close" style={{
-            border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 10,
+            border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 5,
             width: 28, height: 28, cursor: "pointer", color: DS.textSub, fontSize: 15, flexShrink: 0,
           }}>✕</button>
         </div>
@@ -110,7 +110,7 @@ export default function PlaceSheet({
           <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
             {tier.label && (
               <span style={{
-                fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 10,
+                fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 5,
                 background: tier.badgeBg, color: tier.color,
                 border: `1px solid ${tier.badgeBorder}`,
               }}>
@@ -119,7 +119,7 @@ export default function PlaceSheet({
             )}
             {place.event_start && (
               <span style={{
-                fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 10,
+                fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 5,
                 background: "#fff", color: "#dc2626", border: "1px solid #fca5a5",
               }}>
                 📅 {formatEventWindow(place.event_start, place.event_end)}
@@ -133,12 +133,12 @@ export default function PlaceSheet({
         {place.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={place.image_url} alt={place.title} style={{
-            width: "100%", height: 180, borderRadius: 12, marginBottom: 12, objectFit: "cover",
+            width: "100%", height: 180, borderRadius: 6, marginBottom: 12, objectFit: "cover",
             border: `1px solid ${DS.border}`,
           }} />
         ) : (
           <div style={{
-            width: "100%", height: 110, borderRadius: 12, marginBottom: 12,
+            width: "100%", height: 110, borderRadius: 6, marginBottom: 12,
             background: `linear-gradient(135deg, ${cat.tint}, ${cat.color}22)`,
             border: `1px solid ${DS.border}`,
             display: "flex", alignItems: "center", justifyContent: "center",
@@ -160,7 +160,7 @@ export default function PlaceSheet({
         {/* vote row — up = worth it, down = skip it, net score in the middle */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
           <div style={{
-            display: "flex", alignItems: "center", borderRadius: 10,
+            display: "flex", alignItems: "center", borderRadius: 5,
             border: `1.5px solid ${DS.borderMd}`, overflow: "hidden",
           }}>
             <button onClick={() => handleVote(1)} title="Worth it" style={{
@@ -208,7 +208,7 @@ export default function PlaceSheet({
           )}
           {comments?.map((c) => (
             <div key={c.id} style={{
-              background: DS.bg, border: `1px solid ${DS.border}`, borderRadius: 12,
+              background: DS.bg, border: `1px solid ${DS.border}`, borderRadius: 6,
               padding: "9px 12px", marginBottom: 8,
             }}>
               <div style={{ fontSize: 12, fontWeight: 700, color: DS.textSub, marginBottom: 3 }}>
@@ -225,13 +225,13 @@ export default function PlaceSheet({
               onFocus={() => { if (!user) onSignInNeeded(); }}
               placeholder={user ? "How was it? Tips for others…" : "Sign in to leave a remark"}
               style={{
-                flex: 1, padding: "10px 12px", borderRadius: 10, fontSize: 13.5,
+                flex: 1, padding: "10px 12px", borderRadius: 5, fontSize: 13.5,
                 border: `1.5px solid ${DS.border}`, fontFamily: "inherit", color: DS.text,
                 outline: "none", background: "#fff",
               }}
             />
             <button onClick={handlePost} disabled={posting || !draft.trim()} style={{
-              padding: "10px 16px", borderRadius: 10, border: "none", cursor: "pointer",
+              padding: "10px 16px", borderRadius: 5, border: "none", cursor: "pointer",
               background: draft.trim() ? DS.accent : DS.border, color: "#fff",
               fontSize: 13.5, fontWeight: 700, fontFamily: "inherit",
             }}>
