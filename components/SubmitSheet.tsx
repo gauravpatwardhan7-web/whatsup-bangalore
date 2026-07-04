@@ -169,7 +169,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
           Put something on the map
         </span>
         <button onClick={onClose} aria-label="Close" style={{
-          border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 999,
+          border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 10,
           width: 28, height: 28, cursor: "pointer", color: DS.textSub, fontSize: 15,
         }}>✕</button>
       </div>
@@ -183,7 +183,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
           {(Object.keys(CATEGORIES) as Category[]).map((c) => (
             <button key={c} onClick={() => setCategory(c)} style={{
-              padding: "6px 11px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+              padding: "6px 11px", borderRadius: 10, cursor: "pointer", fontSize: 12.5,
               fontWeight: 600, fontFamily: "inherit",
               border: `1.5px solid ${category === c ? CATEGORIES[c].color : DS.border}`,
               background: category === c ? CATEGORIES[c].tint : "#fff",
@@ -221,14 +221,14 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
             ))}
             <div style={{ display: "flex", gap: 7, marginTop: 7, flexWrap: "wrap" }}>
               <button onClick={useMyLocation} disabled={locating} style={{
-                padding: "8px 12px", borderRadius: 999, cursor: "pointer",
+                padding: "8px 12px", borderRadius: 10, cursor: "pointer",
                 border: `1.5px solid ${DS.accent}`, background: "#fdf6f3", fontSize: 12.5,
                 fontWeight: 700, color: DS.accent, fontFamily: "inherit",
               }}>
                 {locating ? "Locating…" : "📍 Use my current location"}
               </button>
               <button onClick={useMapCenter} style={{
-                padding: "8px 12px", borderRadius: 999, cursor: "pointer",
+                padding: "8px 12px", borderRadius: 10, cursor: "pointer",
                 border: `1.5px dashed ${DS.borderMd}`, background: "#fff", fontSize: 12.5,
                 fontWeight: 600, color: DS.textSub, fontFamily: "inherit",
               }}>
@@ -260,7 +260,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
             }} />
             <button onClick={() => setImageUrl(null)} style={{
               position: "absolute", top: 8, right: 8, border: "none", cursor: "pointer",
-              background: "rgba(0,0,0,0.55)", color: "#fff", borderRadius: 999,
+              background: "rgba(0,0,0,0.55)", color: "#fff", borderRadius: 10,
               padding: "4px 10px", fontSize: 11.5, fontWeight: 700, fontFamily: "inherit",
             }}>
               Remove
@@ -308,14 +308,14 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
             {" "}Is this the same place? If it&rsquo;s genuinely different, add it anyway.
             <div style={{ display: "flex", gap: 7, marginTop: 8 }}>
               <button onClick={() => handleSubmit(true)} disabled={saving} style={{
-                padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12,
+                padding: "6px 12px", borderRadius: 10, cursor: "pointer", fontSize: 12,
                 fontWeight: 700, fontFamily: "inherit", border: "1.5px solid #f59e0b",
                 background: "#fff", color: "#92400e",
               }}>
                 It&rsquo;s different — add anyway
               </button>
               <button onClick={() => setDupCandidate(null)} style={{
-                padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12,
+                padding: "6px 12px", borderRadius: 10, cursor: "pointer", fontSize: 12,
                 fontWeight: 600, fontFamily: "inherit", border: "none",
                 background: "rgba(0,0,0,0.06)", color: DS.textSub,
               }}>

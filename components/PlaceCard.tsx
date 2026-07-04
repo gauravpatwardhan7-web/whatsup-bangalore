@@ -39,7 +39,7 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {rank !== undefined && (
               <span style={{
-                flexShrink: 0, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 999,
+                flexShrink: 0, minWidth: 20, height: 20, padding: "0 5px", borderRadius: 10,
                 display: "inline-flex", alignItems: "center", justifyContent: "center",
                 fontSize: 11.5, fontWeight: 800, fontFamily: "var(--font-display)",
                 background: rankStyle(rank).bg, color: rankStyle(rank).color,
@@ -56,7 +56,7 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
             </span>
             {tier.label && (
               <span style={{
-                fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 999,
+                fontSize: 10.5, fontWeight: 700, padding: "3px 8px", borderRadius: 10,
                 background: tier.badgeBg, color: tier.color,
                 border: `1px solid ${tier.badgeBorder}`, whiteSpace: "nowrap",
               }}>

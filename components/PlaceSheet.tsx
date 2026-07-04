@@ -102,7 +102,7 @@ export default function PlaceSheet({
             </div>
           </div>
           <button onClick={onClose} aria-label="Close" style={{
-            border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 999,
+            border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 10,
             width: 28, height: 28, cursor: "pointer", color: DS.textSub, fontSize: 15, flexShrink: 0,
           }}>✕</button>
         </div>
@@ -110,7 +110,7 @@ export default function PlaceSheet({
           <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>
             {tier.label && (
               <span style={{
-                fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 999,
+                fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 10,
                 background: tier.badgeBg, color: tier.color,
                 border: `1px solid ${tier.badgeBorder}`,
               }}>
@@ -119,7 +119,7 @@ export default function PlaceSheet({
             )}
             {place.event_start && (
               <span style={{
-                fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 999,
+                fontSize: 11, fontWeight: 700, padding: "4px 10px", borderRadius: 10,
                 background: "#fff", color: "#dc2626", border: "1px solid #fca5a5",
               }}>
                 📅 {formatEventWindow(place.event_start, place.event_end)}
@@ -160,7 +160,7 @@ export default function PlaceSheet({
         {/* vote row — up = worth it, down = skip it, net score in the middle */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
           <div style={{
-            display: "flex", alignItems: "center", borderRadius: 999,
+            display: "flex", alignItems: "center", borderRadius: 10,
             border: `1.5px solid ${DS.borderMd}`, overflow: "hidden",
           }}>
             <button onClick={() => handleVote(1)} title="Worth it" style={{

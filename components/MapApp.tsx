@@ -130,7 +130,7 @@ export default function MapApp() {
   }
 
   const chipStyle = (active: boolean, color: string, tint: string): React.CSSProperties => ({
-    padding: "6px 12px", borderRadius: 999, cursor: "pointer", fontSize: 12.5,
+    padding: "6px 12px", borderRadius: 10, cursor: "pointer", fontSize: 12.5,
     fontWeight: 600, fontFamily: "inherit", whiteSpace: "nowrap",
     border: `1.5px solid ${active ? color : DS.border}`,
     background: active ? tint : "rgba(255,255,255,0.92)",
@@ -153,7 +153,7 @@ export default function MapApp() {
       }}>
         <div style={{
           display: "flex", alignItems: "center", gap: isMobile ? 6 : 9, background: "rgba(255,255,255,0.95)",
-          backdropFilter: "blur(8px)", borderRadius: 999, padding: isMobile ? "7px 12px" : "8px 16px",
+          backdropFilter: "blur(8px)", borderRadius: 10, padding: isMobile ? "7px 12px" : "8px 16px",
           boxShadow: FLOAT_SHADOW, border: `1px solid ${DS.border}`,
         }}>
           <span style={{ fontSize: isMobile ? 15 : 18 }}>🔥</span>
@@ -168,7 +168,7 @@ export default function MapApp() {
         <button
           onClick={() => (user ? setShowSubmit(true) : handleSignIn())}
           style={{
-            padding: isMobile ? "8px 12px" : "9px 16px", borderRadius: 999, border: "none", cursor: "pointer",
+            padding: isMobile ? "8px 12px" : "9px 16px", borderRadius: 10, border: "none", cursor: "pointer",
             background: DS.accent, color: "#fff", fontSize: 13, fontWeight: 700,
             fontFamily: "inherit", boxShadow: FLOAT_SHADOW, whiteSpace: "nowrap",
           }}
@@ -200,7 +200,7 @@ export default function MapApp() {
           </button>
         ) : (
           <button onClick={handleSignIn} style={{
-            padding: "9px 16px", borderRadius: 999, cursor: "pointer",
+            padding: "9px 16px", borderRadius: 10, cursor: "pointer",
             border: `1.5px solid ${DS.borderMd}`, background: "rgba(255,255,255,0.95)",
             color: DS.text, fontSize: 13, fontWeight: 700, fontFamily: "inherit",
             boxShadow: FLOAT_SHADOW, whiteSpace: "nowrap",
@@ -259,7 +259,7 @@ export default function MapApp() {
           <div style={{ display: "flex", gap: 4, padding: "0 16px 10px" }}>
             {SORTS.map((s) => (
               <button key={s.id} onClick={() => setSort(s.id)} style={{
-                padding: "5px 11px", borderRadius: 999, cursor: "pointer", fontSize: 12,
+                padding: "5px 11px", borderRadius: 10, cursor: "pointer", fontSize: 12,
                 fontWeight: 700, fontFamily: "inherit", border: "none",
                 background: sort === s.id ? DS.text : DS.bg,
                 color: sort === s.id ? "#fff" : DS.textSub,
@@ -338,7 +338,7 @@ export default function MapApp() {
         <div style={{
           position: "absolute", top: isMobile ? "auto" : 16, bottom: isMobile ? 70 : "auto",
           left: "50%", transform: "translateX(-50%)", zIndex: 60,
-          background: DS.text, color: "#fff", borderRadius: 999, padding: "10px 20px",
+          background: DS.text, color: "#fff", borderRadius: 10, padding: "10px 20px",
           fontSize: 13.5, fontWeight: 600, boxShadow: FLOAT_SHADOW, whiteSpace: "nowrap",
         }}>
           {toast}
