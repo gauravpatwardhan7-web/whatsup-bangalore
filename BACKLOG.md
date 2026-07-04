@@ -60,7 +60,7 @@ A personal page collecting everything a signed-in user has done, so activity isn
 ## Already-planned phases (from the original plan)
 
 ### Phase 2 — Trending ingestion ("the map lights up on its own")
-- Daily GitHub Action pulls r/bangalore hot posts → LLM extracts place/event names → geocode → upsert into `mentions` (schema already exists) → feeds `trending_score`.
+- ✅ **Reddit slice built (2026-07-04):** daily GitHub Action → r/bangalore hot posts → Claude extracts named places → geocode → match-or-create pending place → upsert `mentions` → feeds `trending_score`. `scripts/ingest-reddit.ts`, `.github/workflows/ingest-reddit.yml`, migration `0005`. Needs secrets + `0005` run to activate — see `scripts/README.md`. Remaining: tune extraction precision on real output; decide whether reddit-created places should auto-approve above an engagement threshold instead of always pending.
 - Event feeds (BookMyShow / District / Insider) for weekend events.
 - Instagram/X: no free official API — paste-a-link (oEmbed) now; paid scraper (Apify) only if wanted later.
 
