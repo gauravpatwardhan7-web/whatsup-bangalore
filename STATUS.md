@@ -3,7 +3,7 @@
 The one file to read when starting a session and update before ending one. If this
 disagrees with memory or chat, **this file wins**. Keep it short and current.
 
-**Last updated:** 2026-07-05 · **Phase:** MVP live; Phase 2 (Reddit ingestion) unblocked (Arctic Shift, keyless) — ready for live run
+**Last updated:** 2026-07-05 · **Phase:** Live on Netlify (prod); Phase 2 (Reddit ingestion) wired & CI-green — awaiting first live run after Gemini quota reset
 
 ---
 
@@ -48,7 +48,7 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 - **Phase 2 — Reddit ingestion pipeline (code complete, unblocked):** `scripts/ingest-reddit.ts` + daily GitHub Action. Fetches r/bangalore posts **via Arctic Shift** (keyless archive; 1–4-day-old window ranked by engagement) → Gemini (`gemini-2.5-flash`, free tier) extracts named places → geocodes in BLR → matches existing or creates `pending` (`source='reddit'`) → upserts `mentions` (feeds `trending_score`). Dry-run verified end to end from a data-center IP (no block). `0005` migration run; `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`GEMINI_API_KEY` secrets added. **No Reddit creds needed** (dropped the Reddit-API path entirely — approval gate + CI IP block made it a dead end). Docs: `scripts/README.md`.
 
 ## Current focus
-- **Reddit ingestion — one step from live.** CI dry-run is GREEN end to end (Arctic Shift fetch → Gemini extract → geocode; verified on the runner). The live run works too but hit **Gemini free-tier daily quota** (limit 20 req/day for `gemini-2.5-flash`), spent by repeated same-day testing — not a code bug. **PR #3** (open) hardens against this: retries per-minute limits, bails fast on daily-quota, and cuts calls 5→2/run via `CHUNK_SIZE` 8→20. **Next:** merge PR #3, then either wait for the daily quota reset (~midnight PT ≈ 1:30pm IST) and re-run live, or just let the scheduled 03:15 UTC run do it (after reset). Then review `/admin` pending queue. NB: the Gemini key was pasted in chat — rotate it.
+- **Reddit ingestion — awaiting first live run.** CI dry-run GREEN end to end (Arctic Shift → Gemini → geocode). The live run works; it only hit **Gemini free-tier daily quota** (20 req/day for `gemini-2.5-flash`) spent by same-day testing — not a bug. Hardening merged (retries + fast bail on daily-quota + `CHUNK_SIZE` 8→20 = 2 calls/run). **Next:** the scheduled 03:15 UTC run (after quota reset) auto-fills the `/admin` pending queue; then do the first approval pass. NB: **rotate the Gemini key** (pasted in chat) + update the `GEMINI_API_KEY` secret.
 - **Instagram source via Apify free tier** — user wants to try after Reddit is live. Add a second ingestion path (`source='instagram'`) reusing the same Gemini-extract → geocode → mentions pipeline. Needs an Apify token + a BLR-relevant actor (hashtag/location scraper). Watch the free-tier credit budget.
 - **Verify live buzz tiers + realtime end to end** (0003 now run): open the app in two tabs, vote in one, confirm the other's count/badge/glow update with no refresh; removing a vote should downgrade the tier instantly.
 
