@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { BLR_CENTER, CATEGORIES, DS, FLOAT_SHADOW, buzzScore, type Category } from "@/lib/ds";
 import { fetchPlaces, fetchPlaceStats, getSessionUser, signInWithGoogle, signOut, subscribeToActivity } from "@/lib/data";
 import { MOCK_MODE } from "@/lib/supabase/client";
@@ -165,6 +166,20 @@ export default function MapApp() {
           </span>
         </div>
         <div style={{ flex: 1 }} />
+        {user?.isAdmin && (
+          <Link
+            href="/admin"
+            title="Admin — moderate pending spots"
+            style={{
+              padding: isMobile ? "8px 12px" : "9px 16px", borderRadius: 5, cursor: "pointer",
+              border: `1.5px solid ${DS.borderMd}`, background: "rgba(255,255,255,0.95)",
+              color: DS.text, fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+              boxShadow: FLOAT_SHADOW, whiteSpace: "nowrap", textDecoration: "none",
+            }}
+          >
+            {isMobile ? "Admin" : "⚙ Admin"}
+          </Link>
+        )}
         <button
           onClick={() => (user ? setShowSubmit(true) : handleSignIn())}
           style={{
