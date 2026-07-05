@@ -39,7 +39,7 @@ const MIN_AGE_DAYS = 1; // let votes/comments accumulate before we rank a post
 const LOOKBACK_DAYS = 4; // don't consider posts older than this
 const FETCH_LIMIT = 100; // Arctic Shift max results per request
 const HOT_LIMIT = 40; // top-by-engagement posts to actually analyze
-const CHUNK_SIZE = 8; // posts per LLM call
+const CHUNK_SIZE = 20; // posts per LLM call (fewer calls → lighter on Gemini free-tier quota)
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const MATCH_RADIUS_M = 200; // an extracted place within this of an existing one, same-ish name → merge
 const USER_AGENT = "whatsup-bangalore-ingest/1.0 (https://github.com/gauravpatwardhan7-web/whatsup-bangalore)";
@@ -183,18 +183,44 @@ async function extractCandidates(ai: GoogleGenAI, posts: RedditPost[], baseIndex
     .map((p, i) => `[${baseIndex + i}] ${p.title}${p.selftext ? `\n${p.selftext}` : ""}`)
     .join("\n\n");
 
-  const resp = await ai.models.generateContent({
-    model: GEMINI_MODEL,
-    contents: `Posts:\n\n${numbered}`,
-    config: {
-      systemInstruction: SYSTEM_PROMPT,
-      responseMimeType: "application/json",
-      responseSchema: EXTRACTION_SCHEMA,
-      temperature: 0,
-    },
-  });
+  // A rate-limit (429) or transient error on one chunk shouldn't abort the whole
+  // run — retry with backoff (honoring the API's retryDelay when given), then skip
+  // the chunk so already-extracted chunks still get written.
+  let text: string | undefined;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      const resp = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: `Posts:\n\n${numbered}`,
+        config: {
+          systemInstruction: SYSTEM_PROMPT,
+          responseMimeType: "application/json",
+          responseSchema: EXTRACTION_SCHEMA,
+          temperature: 0,
+        },
+      });
+      text = resp.text;
+      break;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const isRateLimit = /\b429\b|RESOURCE_EXHAUSTED|quota/i.test(msg);
+      // A per-day quota can't clear by waiting — bail fast rather than burn minutes.
+      const isDailyQuota = /PerDay|RequestsPerDay|free_tier_requests/i.test(msg);
+      if (isDailyQuota) {
+        console.warn("  Gemini daily free-tier quota exhausted — skipping remaining extraction.");
+        return [];
+      }
+      if (attempt === 3 || !isRateLimit) {
+        console.warn(`  extraction call failed (attempt ${attempt}) — skipping chunk: ${msg.slice(0, 160)}`);
+        return [];
+      }
+      const retryMs = /"retryDelay":"(\d+)/.exec(msg)?.[1];
+      const waitMs = retryMs ? Number(retryMs) * 1000 + 1000 : 5000 * attempt;
+      console.warn(`  extraction rate-limited (attempt ${attempt}) — waiting ${Math.round(waitMs / 1000)}s`);
+      await sleep(waitMs);
+    }
+  }
 
-  const text = resp.text;
   if (!text) {
     console.warn("  extraction returned no text for a chunk (blocked/empty) — skipping it");
     return [];
