@@ -32,6 +32,7 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 - Basemap: free OpenFreeMap tiles (no key). Optional `NEXT_PUBLIC_MAPTILER_KEY` for MapTiler.
 - Secrets are gitignored (`.env.local`, `client_secret_*.json`) — never committed.
 - ✅ Reddit ingestion source switched to **Arctic Shift** (keyless) — no Reddit API app/creds needed. `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` secrets are now unused and can be deleted.
+- ✅ **Deployed to Netlify** — prod URL https://whatsupbangalore.netlify.app (auto-deploys on push to `main`; `netlify.toml` + `@netlify/plugin-nextjs`, Node 22). Env vars set on Netlify: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`. **Never put `SUPABASE_SERVICE_ROLE_KEY` on Netlify** — it's only for the ingestion GitHub Action. Supabase Auth URL config updated (Site URL + `/auth/callback` redirect for the Netlify domain; `localhost:3000` kept for dev). Google sign-in verified working in prod.
 
 ## Done (working & verified)
 - Map feed (MapLibre) with category pins, list panel, sort (Trending/Newest/Most loved), filters (category + "This weekend"), mobile bottom sheet.
@@ -54,7 +55,8 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 ## Next up (candidates — see BACKLOG.md for detail)
 1. **Guardrails, next slice:** "report" button (duplicate / wrong location / closed) → admin queue; needs a `reports` table migration. (`BACKLOG.md` → Guardrails)
 2. **Account / activity hub:** my comments/votes/submissions + "been there" collectibles. (`BACKLOG.md`)
-3. Deploy to Vercel (add env vars + Supabase redirect URL for the prod domain).
+3. ✅ ~~Deploy~~ — **done, live on Netlify** (https://whatsupbangalore.netlify.app).
+4. **Instagram source via Apify free tier** — after first live Reddit ingestion run confirms quality.
 
 ## Key pointers
 - **Backlog & edge cases:** `BACKLOG.md`
