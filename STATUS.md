@@ -3,7 +3,7 @@
 The one file to read when starting a session and update before ending one. If this
 disagrees with memory or chat, **this file wins**. Keep it short and current.
 
-**Last updated:** 2026-07-05 · **Phase:** MVP live; Phase 2 (Reddit ingestion) wired, blocked on Reddit creds
+**Last updated:** 2026-07-05 · **Phase:** MVP live; Phase 2 (Reddit ingestion) unblocked (Arctic Shift, keyless) — ready for live run
 
 ---
 
@@ -31,6 +31,7 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 - ✅ Photo uploads working (Storage bucket `place-images`).
 - Basemap: free OpenFreeMap tiles (no key). Optional `NEXT_PUBLIC_MAPTILER_KEY` for MapTiler.
 - Secrets are gitignored (`.env.local`, `client_secret_*.json`) — never committed.
+- ✅ Reddit ingestion source switched to **Arctic Shift** (keyless) — no Reddit API app/creds needed. `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` secrets are now unused and can be deleted.
 
 ## Done (working & verified)
 - Map feed (MapLibre) with category pins, list panel, sort (Trending/Newest/Most loved), filters (category + "This weekend"), mobile bottom sheet.
@@ -43,10 +44,11 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 - Live "buzz" tiers (Quiet→Warming up→Trending→Buzzing→On fire) computed from live counts; drives badge + pin glow + sort.
 - Supabase Realtime wiring (code done; needs `0003_realtime.sql` run to activate).
 - Submit guardrails, first slice: duplicate warning (~75m + fuzzy title, warn-and-allow), Bengaluru bounding-box check, event-date validation, clearer description label. (`lib/guardrails.ts`, unit-sanity-checked; UI flow needs a signed-in manual pass.)
-- **Phase 2 — Reddit ingestion pipeline (code complete):** `scripts/ingest-reddit.ts` + daily GitHub Action. Fetches r/bangalore hot posts → Gemini (`gemini-2.5-flash`, free tier) extracts named places → geocodes in BLR → matches existing or creates `pending` (`source='reddit'`) → upserts `mentions` (feeds `trending_score`). Pure helpers unit-tested; live dry-run reaches the Reddit call. `0005` migration run; `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`GEMINI_API_KEY` secrets added. **Blocked on Reddit creds** (`REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET`) — CI IP is blocked from anonymous Reddit reads. Docs: `scripts/README.md`.
+- **Phase 2 — Reddit ingestion pipeline (code complete, unblocked):** `scripts/ingest-reddit.ts` + daily GitHub Action. Fetches r/bangalore posts **via Arctic Shift** (keyless archive; 1–4-day-old window ranked by engagement) → Gemini (`gemini-2.5-flash`, free tier) extracts named places → geocodes in BLR → matches existing or creates `pending` (`source='reddit'`) → upserts `mentions` (feeds `trending_score`). Dry-run verified end to end from a data-center IP (no block). `0005` migration run; `SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`GEMINI_API_KEY` secrets added. **No Reddit creds needed** (dropped the Reddit-API path entirely — approval gate + CI IP block made it a dead end). Docs: `scripts/README.md`.
 
 ## Current focus
-- **Activate Reddit ingestion.** Waiting on `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` (script app at reddit.com/prefs/apps). Then: Actions → "Reddit ingestion" → run with dry-run=true, confirm extraction quality, run live, review `/admin` pending queue.
+- **Activate Reddit ingestion (unblocked).** No creds needed anymore. Next: Actions → "Reddit ingestion" → run with dry-run=true (confirm extraction quality on real Gemini output), then run live, then review `/admin` pending queue.
+- **Instagram source via Apify free tier** — user wants to try after Reddit is live. Add a second ingestion path (`source='instagram'`) reusing the same Gemini-extract → geocode → mentions pipeline. Needs an Apify token + a BLR-relevant actor (hashtag/location scraper). Watch the free-tier credit budget.
 - **Verify live buzz tiers + realtime end to end** (0003 now run): open the app in two tabs, vote in one, confirm the other's count/badge/glow update with no refresh; removing a vote should downgrade the tier instantly.
 
 ## Next up (candidates — see BACKLOG.md for detail)
@@ -68,3 +70,4 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 - 2026-07-04 — Dev-env fixes: pinned `turbopack.root` (stray `~/package-lock.json` broke workspace-root inference), launch.json `autoPort` so preview servers don't fight over port 3000. Verified app serves clean after a `.next` cache wipe. No product changes.
 - 2026-07-04 (later) — Visual pass: softened all radii off full pills (5/6/8/10 scale, avatar stays round), theme accent terracotta→sage green, fixed a crash where a negative net vote score (downvotes) found no buzz tier. Built Phase 2 Reddit ingestion (script + Action + `0005` migration + `@google/genai`/`tsx` deps; extraction via Gemini free tier); not yet activated (needs secrets + migration).
 - 2026-07-05 — Ran migrations `0003_realtime.sql` + `0005_mentions_dedupe.sql`. Added GitHub secrets `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` (new `sb_secret_` key), `GEMINI_API_KEY`. Pushed to GitHub `main`. Reddit ingestion is one step from live — blocked only on `REDDIT_CLIENT_ID`/`REDDIT_CLIENT_SECRET` (script app pending Reddit approval).
+- 2026-07-05 (later) — **Unblocked Reddit ingestion by dropping the Reddit API entirely.** Reddit now gates API access behind an approval form (unlikely to pass) on top of the CI-IP block. Switched `fetchHotPosts()` to Arctic Shift (keyless public archive; sibling repo `blr-neighborhood-explorer` uses the same source). Adapted parser to the flat `{data:[…]}` shape; window = posts 1–4 days old (matured vote counts) ranked by engagement. Stripped Reddit-creds path from script, workflow, and README. **Verified the full pipeline end to end with a real Gemini key (no-write dry-run):** 40 posts → Gemini extracted 2 clean candidates (Panchavati, Cubbon Park) → both geocoded inside BLR. Along the way **fixed a geocode bug** — `lib/geocode.ts` sent no `User-Agent`, so Nominatim returned nothing under Node (Cubbon Park failed to geocode); added a UA (browsers ignore it, so submit flow unaffected). Next: run the Action live. Also queued: Instagram-via-Apify source after Reddit lands.

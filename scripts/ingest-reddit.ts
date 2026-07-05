@@ -1,10 +1,16 @@
 /**
  * Phase 2 — Reddit ingestion ("the map lights up on its own").
  *
- * Pulls hot posts from r/bangalore, uses Gemini to extract specific named
+ * Pulls recent r/bangalore posts, uses Gemini to extract specific named
  * places/events, geocodes them inside Bengaluru, matches against existing
  * places (or creates a `pending` one), and records a row in `mentions` — which
  * feeds `trending_score` via the time-decayed view in 0001_init.sql.
+ *
+ * Posts come from Arctic Shift (arctic-shift.photon-reddit.com), a free, keyless
+ * public Reddit archive (Pushshift's successor). Unlike Reddit's own API it needs
+ * no OAuth app / approval and isn't IP-blocked from CI/data-center runners — which
+ * is what unblocked this pipeline. It has no "hot" listing, so we pull the recent
+ * lookback window and rank by engagement ourselves.
  *
  * Runs daily from .github/workflows/ingest-reddit.yml. Writes with the Supabase
  * service-role key (mentions/places RLS only allows service-role inserts).
@@ -24,7 +30,15 @@ import { searchBangalore } from "../lib/geocode";
 import { isInBengaluru, findDuplicate } from "../lib/guardrails";
 
 const SUBREDDIT = "bangalore";
-const HOT_LIMIT = 40;
+const ARCTIC_BASE = "https://arctic-shift.photon-reddit.com";
+// Arctic Shift backfills mature vote counts, but a just-posted item still shows
+// score ~1. r/bangalore also posts >100/day, so a plain "newest first" fetch only
+// ever sees immature posts. We instead take a window that's aged enough to have
+// real engagement (>= MIN_AGE_DAYS) but still recent (<= LOOKBACK_DAYS old).
+const MIN_AGE_DAYS = 1; // let votes/comments accumulate before we rank a post
+const LOOKBACK_DAYS = 4; // don't consider posts older than this
+const FETCH_LIMIT = 100; // Arctic Shift max results per request
+const HOT_LIMIT = 40; // top-by-engagement posts to actually analyze
 const CHUNK_SIZE = 8; // posts per LLM call
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const MATCH_RADIUS_M = 200; // an extracted place within this of an existing one, same-ish name → merge
@@ -61,10 +75,13 @@ export function normalizeEngagement(score: number, numComments: number): number 
 }
 
 export function parseRedditPosts(json: unknown): RedditPost[] {
-  const children = (json as { data?: { children?: unknown[] } })?.data?.children ?? [];
+  // Arctic Shift returns a flat { data: [postObj, ...] } array of raw Reddit post
+  // objects — not Reddit's own { data: { children: [{ data }] } } envelope. It can
+  // be null on an upstream error/timeout, so guard for that.
+  const rows = (json as { data?: unknown[] })?.data ?? [];
   const posts: RedditPost[] = [];
-  for (const child of children) {
-    const d = (child as { data?: Record<string, unknown> })?.data;
+  for (const row of rows) {
+    const d = row as Record<string, unknown>;
     if (!d) continue;
     if (d.stickied || d.over_18) continue;
     const title = String(d.title ?? "").trim();
@@ -96,41 +113,27 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ── external steps ─────────────────────────────────────────────────────────────
 
-// Reddit blocks the anonymous public .json endpoint from many data-center IPs
-// (including CI runners). With REDDIT_CLIENT_ID/SECRET set (a free "script" app
-// → userless client-credentials token), we hit the authenticated API instead,
-// which is reliable. Without them we fall back to the public endpoint.
-async function redditToken(): Promise<string | null> {
-  const id = process.env.REDDIT_CLIENT_ID;
-  const secret = process.env.REDDIT_CLIENT_SECRET;
-  if (!id || !secret) return null;
-  const res = await fetch("https://www.reddit.com/api/v1/access_token", {
-    method: "POST",
-    headers: {
-      "User-Agent": USER_AGENT,
-      Authorization: `Basic ${Buffer.from(`${id}:${secret}`).toString("base64")}`,
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body: "grant_type=client_credentials",
-  });
-  if (!res.ok) throw new Error(`Reddit auth failed: ${res.status} ${res.statusText}`);
-  return (await res.json()).access_token as string;
-}
-
+// Fetch recent-but-matured r/bangalore posts from Arctic Shift and rank them by
+// engagement. Arctic Shift has no "hot" endpoint, so we pull a [now-LOOKBACK,
+// now-MIN_AGE] window (newest matured posts first) and sort by our own engagement
+// score, taking the top HOT_LIMIT. Keyless and not IP-blocked from CI, unlike
+// Reddit's own API.
 async function fetchHotPosts(): Promise<RedditPost[]> {
-  const token = await redditToken();
-  const base = token ? "https://oauth.reddit.com" : "https://www.reddit.com";
-  const url = `${base}/r/${SUBREDDIT}/hot.json?limit=${HOT_LIMIT}&raw_json=1`;
-  const headers: Record<string, string> = { "User-Agent": USER_AGENT, Accept: "application/json" };
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(url, { headers });
+  const now = Math.floor(Date.now() / 1000);
+  const after = now - LOOKBACK_DAYS * 86400;
+  const before = now - MIN_AGE_DAYS * 86400;
+  const url = `${ARCTIC_BASE}/api/posts/search?subreddit=${SUBREDDIT}&after=${after}&before=${before}&sort=desc&limit=${FETCH_LIMIT}`;
+  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } });
   if (!res.ok) {
-    const hint = res.status === 403 && !token
-      ? " — the public endpoint is IP-blocked here; set REDDIT_CLIENT_ID/REDDIT_CLIENT_SECRET"
-      : "";
-    throw new Error(`Reddit fetch failed: ${res.status} ${res.statusText}${hint}`);
+    throw new Error(`Arctic Shift fetch failed: ${res.status} ${res.statusText}`);
   }
-  return parseRedditPosts(await res.json());
+  const json = await res.json();
+  if (json?.error) throw new Error(`Arctic Shift error: ${json.error}`);
+  const posts = parseRedditPosts(json);
+  posts.sort(
+    (a, b) => normalizeEngagement(b.score, b.numComments) - normalizeEngagement(a.score, a.numComments),
+  );
+  return posts.slice(0, HOT_LIMIT);
 }
 
 const EXTRACTION_SCHEMA = {
@@ -225,7 +228,7 @@ async function main() {
   }
 
   const posts = await fetchHotPosts();
-  console.log(`Fetched ${posts.length} eligible hot posts from r/${SUBREDDIT}.`);
+  console.log(`Fetched ${posts.length} post(s) from r/${SUBREDDIT} (via Arctic Shift, ${MIN_AGE_DAYS}-${LOOKBACK_DAYS}d old).`);
 
   const supabase = canWrite ? createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false } }) : null;
 
