@@ -19,6 +19,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://whatsupbangalore.netlify.app"),
   title: "Whatsup Bangalore",
   description:
     "A living map of what's trending in Bengaluru — places, events, and experiences, upvoted by the people who went.",

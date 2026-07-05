@@ -47,6 +47,16 @@ export default function MapApp() {
   const [toast, setToast] = useState<string | null>(null);
   const mapCenterRef = useRef({ lat: BLR_CENTER[1], lng: BLR_CENTER[0] });
 
+  // Tidy the URL after an OAuth round-trip — if a stray ?code/?error lands on
+  // any page, strip it so it doesn't linger in the address bar or get shared.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (["code", "error", "error_description"].some((k) => url.searchParams.has(k))) {
+      ["code", "error", "error_description"].forEach((k) => url.searchParams.delete(k));
+      window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+    }
+  }, []);
+
   useEffect(() => {
     fetchPlaces().then(setPlaces).catch(() => setToast("Couldn't load places — check your Supabase setup."))
       .finally(() => setLoading(false));
