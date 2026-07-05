@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { BLR_CENTER, CATEGORIES, DS, FLOAT_SHADOW, buzzScore, type Category } from "@/lib/ds";
-import { fetchPlaces, fetchPlaceStats, getSessionUser, signInWithGoogle, signOut, subscribeToActivity } from "@/lib/data";
+import { countPendingPlaces, fetchPlaces, fetchPlaceStats, getSessionUser, signInWithGoogle, signOut, subscribeToActivity } from "@/lib/data";
 import { MOCK_MODE } from "@/lib/supabase/client";
 import { isThisWeekend } from "@/lib/format";
 import type { Place, SessionUser, SortMode } from "@/lib/types";
@@ -37,6 +37,7 @@ export default function MapApp() {
   const [places, setPlaces] = useState<Place[]>([]);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<SessionUser | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSubmit, setShowSubmit] = useState(false);
   const [listOpen, setListOpen] = useState(true);
@@ -49,7 +50,10 @@ export default function MapApp() {
   useEffect(() => {
     fetchPlaces().then(setPlaces).catch(() => setToast("Couldn't load places — check your Supabase setup."))
       .finally(() => setLoading(false));
-    getSessionUser().then(setUser).catch(() => {});
+    getSessionUser().then((u) => {
+      setUser(u);
+      if (u?.isAdmin) countPendingPlaces().then(setPendingCount).catch(() => {});
+    }).catch(() => {});
   }, []);
 
   // Real-time: when anyone votes or comments, refresh that one place's live
@@ -169,8 +173,9 @@ export default function MapApp() {
         {user?.isAdmin && (
           <Link
             href="/admin"
-            title="Admin — moderate pending spots"
+            title={`Admin — ${pendingCount} pending spot${pendingCount === 1 ? "" : "s"}`}
             style={{
+              display: "flex", alignItems: "center", gap: 6,
               padding: isMobile ? "8px 12px" : "9px 16px", borderRadius: 5, cursor: "pointer",
               border: `1.5px solid ${DS.borderMd}`, background: "rgba(255,255,255,0.95)",
               color: DS.text, fontSize: 13, fontWeight: 700, fontFamily: "inherit",
@@ -178,6 +183,15 @@ export default function MapApp() {
             }}
           >
             {isMobile ? "Admin" : "⚙ Admin"}
+            {pendingCount > 0 && (
+              <span style={{
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                minWidth: 18, height: 18, padding: "0 5px", borderRadius: 999,
+                background: DS.accent, color: "#fff", fontSize: 11, fontWeight: 700, lineHeight: 1,
+              }}>
+                {pendingCount}
+              </span>
+            )}
           </Link>
         )}
         <button

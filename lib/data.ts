@@ -246,6 +246,17 @@ export async function fetchAllPlacesForAdmin(): Promise<Place[]> {
   return (data ?? []) as Place[];
 }
 
+// Cheap count of the moderation backlog (drives the header "Admin" badge).
+export async function countPendingPlaces(): Promise<number> {
+  if (MOCK_MODE) return mockPlaces.filter((p) => p.status === "pending").length;
+  const { count, error } = await supabaseBrowser()
+    .from("places")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "pending");
+  if (error) throw error;
+  return count ?? 0;
+}
+
 export async function setPlaceStatus(placeId: string, status: "approved" | "rejected"): Promise<void> {
   if (MOCK_MODE) {
     mockPlaces = mockPlaces.map((p) => (p.id === placeId ? { ...p, status } : p));
