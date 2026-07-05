@@ -123,12 +123,24 @@ async function fetchHotPosts(): Promise<RedditPost[]> {
   const after = now - LOOKBACK_DAYS * 86400;
   const before = now - MIN_AGE_DAYS * 86400;
   const url = `${ARCTIC_BASE}/api/posts/search?subreddit=${SUBREDDIT}&after=${after}&before=${before}&sort=desc&limit=${FETCH_LIMIT}`;
-  const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Arctic Shift fetch failed: ${res.status} ${res.statusText}`);
+
+  // Arctic Shift is a free hobby-run service that occasionally returns a transient
+  // 422/5xx under node churn; retry a few times with backoff before giving up.
+  let json: unknown = null;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, Accept: "application/json" } });
+    if (res.ok) {
+      json = await res.json();
+      if (!(json as { error?: string })?.error) break;
+      console.warn(`  Arctic Shift returned an error body (attempt ${attempt}): ${(json as { error?: string }).error}`);
+    } else {
+      console.warn(`  Arctic Shift fetch ${res.status} ${res.statusText} (attempt ${attempt})`);
+    }
+    if (attempt === 3) {
+      throw new Error(`Arctic Shift fetch failed after 3 attempts: ${res.status} ${res.statusText}`);
+    }
+    await sleep(2000 * attempt);
   }
-  const json = await res.json();
-  if (json?.error) throw new Error(`Arctic Shift error: ${json.error}`);
   const posts = parseRedditPosts(json);
   posts.sort(
     (a, b) => normalizeEngagement(b.score, b.numComments) - normalizeEngagement(a.score, a.numComments),
