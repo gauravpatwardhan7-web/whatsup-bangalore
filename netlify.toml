@@ -1,0 +1,14 @@
+# Netlify deploy config. The Next.js runtime plugin is what makes SSR routes
+# (e.g. /auth/callback) and prerendered pages resolve — without it Netlify serves
+# the raw .next folder and every path 404s. This file must be committed to the
+# repo so Netlify actually reads it.
+[build]
+  command = "npm run build"
+
+[build.environment]
+  # Pin Node 22 — Next.js 16 and @supabase/supabase-js (WebSocket) need a modern
+  # runtime; Netlify's default can lag behind.
+  NODE_VERSION = "22"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
