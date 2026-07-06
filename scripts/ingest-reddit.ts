@@ -39,7 +39,7 @@ const MIN_AGE_DAYS = 1; // let votes/comments accumulate before we rank a post
 const LOOKBACK_DAYS = 4; // don't consider posts older than this
 const FETCH_LIMIT = 100; // Arctic Shift max results per request
 const HOT_LIMIT = 40; // top-by-engagement posts to actually analyze
-const CHUNK_SIZE = 20; // posts per LLM call (fewer calls → lighter on Gemini free-tier quota)
+const CHUNK_SIZE = 10; // posts per LLM call — smaller chunks parse more reliably than 20
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const MATCH_RADIUS_M = 200; // an extracted place within this of an existing one, same-ish name → merge
 const USER_AGENT = "whatsup-bangalore-ingest/1.0 (https://github.com/gauravpatwardhan7-web/whatsup-bangalore)";
@@ -198,18 +198,44 @@ Extract ONLY a place/event when the post names a specific venue a person could g
 
 Do NOT extract: general city discussion, complaints, traffic/civic rants, questions with no named place, memes, politics, apartments/PGs/real-estate, generic areas or neighborhoods alone ("Indiranagar", "Koramangala"), companies/offices, or vague references ("a nice cafe near me").
 
-For each, choose the single best category from the allowed list, write a one-sentence reason drawn from the post about why it's notable, and set is_event=true only for time-bound events. post_number is the number shown before the post. If a post yields no specific place, include nothing for it. Deduplicate within a post.`;
+CRITICAL — intent check. Extract a place ONLY when the post recommends, reviews, or is genuinely about going there / the experience of being there (great food, good vibe, a gig, a thing to do). Do NOT extract a venue that is merely the incidental backdrop of a different story — a crime, accident, scam, arrest, complaint, traffic/toll gripe, lost-and-found, protest, or news incident. If the post's real subject is a problem or event that just happens to occur at/near a named place, return nothing for it. Examples of what to SKIP: "spotted X near Church Street, why no police action" (a complaint — skip Church Street), "BMTC charges toll at the airport" (a fare gripe — skip the airport), "accident near Toit yesterday" (skip Toit).
+
+For each kept place, choose the single best category from the allowed list, write a one-sentence reason drawn from the post about why it's worth visiting, and set is_event=true only for time-bound events. post_number is the number shown before the post. If a post yields no specific recommended place, include nothing for it. Deduplicate within a post.`;
+
+// Parse the model's response into candidates, tolerating the ways structured
+// output occasionally arrives dirty: markdown ```json fences, or leading/trailing
+// prose around the object. Returns null when nothing parseable is found.
+export function parseCandidates(text: string | undefined): Candidate[] | null {
+  if (!text) return null;
+  const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
+  const tryParse = (s: string): Candidate[] | null => {
+    try {
+      const parsed = JSON.parse(s) as { places?: Candidate[] };
+      return Array.isArray(parsed.places) ? parsed.places : null;
+    } catch {
+      return null;
+    }
+  };
+  const direct = tryParse(cleaned);
+  if (direct) return direct;
+  // Fallback: extract the outermost {...} and try that.
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
+  if (start >= 0 && end > start) return tryParse(cleaned.slice(start, end + 1));
+  return null;
+}
 
 async function extractCandidates(ai: GoogleGenAI, posts: RedditPost[], baseIndex: number): Promise<Candidate[]> {
   const numbered = posts
     .map((p, i) => `[${baseIndex + i}] ${p.title}${p.selftext ? `\n${p.selftext}` : ""}`)
     .join("\n\n");
 
-  // A rate-limit (429) or transient error on one chunk shouldn't abort the whole
-  // run — retry with backoff (honoring the API's retryDelay when given), then skip
-  // the chunk so already-extracted chunks still get written.
-  let text: string | undefined;
+  // A rate-limit (429), transient error, or an unparseable body on one chunk
+  // shouldn't abort the whole run. Retry with backoff (honoring the API's
+  // retryDelay when given); after the last attempt, skip the chunk so the
+  // chunks that did parse still get written.
   for (let attempt = 1; attempt <= 3; attempt++) {
+    let text: string | undefined;
     try {
       const resp = await ai.models.generateContent({
         model: GEMINI_MODEL,
@@ -222,7 +248,6 @@ async function extractCandidates(ai: GoogleGenAI, posts: RedditPost[], baseIndex
         },
       });
       text = resp.text;
-      break;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const isRateLimit = /\b429\b|RESOURCE_EXHAUSTED|quota/i.test(msg);
@@ -240,20 +265,21 @@ async function extractCandidates(ai: GoogleGenAI, posts: RedditPost[], baseIndex
       const waitMs = retryMs ? Number(retryMs) * 1000 + 1000 : 5000 * attempt;
       console.warn(`  extraction rate-limited (attempt ${attempt}) — waiting ${Math.round(waitMs / 1000)}s`);
       await sleep(waitMs);
+      continue;
     }
-  }
 
-  if (!text) {
-    console.warn("  extraction returned no text for a chunk (blocked/empty) — skipping it");
-    return [];
+    const parsed = parseCandidates(text);
+    if (parsed) return parsed;
+    // Parseable output failed (blocked/empty/malformed) — retry a couple times
+    // before giving up on this chunk, since it's often transient.
+    if (attempt === 3) {
+      console.warn("  couldn't parse extraction JSON after 3 attempts — skipping chunk");
+      return [];
+    }
+    console.warn(`  couldn't parse extraction JSON (attempt ${attempt}) — retrying`);
+    await sleep(1500 * attempt);
   }
-  try {
-    const parsed = JSON.parse(text) as { places?: Candidate[] };
-    return parsed.places ?? [];
-  } catch {
-    console.warn("  couldn't parse extraction JSON — skipping chunk");
-    return [];
-  }
+  return [];
 }
 
 // Existing place matching `name` within MATCH_RADIUS_M of (lat,lng), or null.
