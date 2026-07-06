@@ -178,6 +178,21 @@ export default function PlaceSheet({
           </a>
         )}
 
+        {/* One-tap directions: opens Google Maps navigation to the pin.
+            Uses coordinates so it works even when there's no street address. */}
+        <a
+          href={`https://www.google.com/maps/dir/?api=1&destination=${place.lat},${place.lng}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+            marginTop: 14, padding: "12px", borderRadius: 6, textDecoration: "none",
+            background: DS.accent, color: "#fff", fontSize: 14, fontWeight: 700,
+          }}
+        >
+          🧭 Directions in Google Maps
+        </a>
+
         {/* vote row — up = worth it, down = skip it, net score in the middle */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
           <div style={{
