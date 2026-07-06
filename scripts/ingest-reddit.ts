@@ -45,6 +45,28 @@ const MATCH_RADIUS_M = 200; // an extracted place within this of an existing one
 const USER_AGENT = "whatsup-bangalore-ingest/1.0 (https://github.com/gauravpatwardhan7-web/whatsup-bangalore)";
 const CATEGORY_KEYS = Object.keys(CATEGORIES) as Category[];
 
+// Keyword photo per category (loremflickr, same service the curated seeds use)
+// so auto-discovered places aren't left with just the emoji placeholder. An
+// admin can swap in the real venue photo via the in-app edit sheet.
+const PHOTO_KEYWORDS: Record<Category, string> = {
+  food: "restaurant,food",
+  drinks: "bar,beer",
+  outdoors: "park,nature",
+  art_culture: "art,gallery",
+  shopping: "market,shopping",
+  nightlife: "nightlife,bar",
+  experience: "travel,experience",
+  event: "festival,concert",
+};
+
+// Stable per-place image: hash the name into a loremflickr ?lock so the same
+// place always resolves to the same photo (not a new random one each load).
+export function photoUrlFor(category: Category, seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return `https://loremflickr.com/600/400/${PHOTO_KEYWORDS[category]}?lock=${h % 100000}`;
+}
+
 // ── types ────────────────────────────────────────────────────────────────────
 export interface RedditPost {
   title: string;
@@ -342,6 +364,7 @@ async function main() {
           lat: geo.lat,
           lng: geo.lng,
           address: geo.label.split(",").slice(0, 2).join(","),
+          image_url: photoUrlFor(category, cand.name),
           source_url: post.permalink,
           status: "pending", // human moderation backstop before it shows on the map
           source: "reddit",
