@@ -3,16 +3,25 @@
 import { useRef, useState } from "react";
 import { CATEGORIES, DS, FLOAT_SHADOW, type Category } from "@/lib/ds";
 import { searchBangalore, type GeocodeResult } from "@/lib/geocode";
-import { fetchNearbyPlaces, submitPlace, uploadImage, type NearbyPlace } from "@/lib/data";
+import { fetchNearbyPlaces, submitPlace, updatePlace, uploadImage, type NearbyPlace } from "@/lib/data";
 import { findDuplicate, isInBengaluru, validateEventDates } from "@/lib/guardrails";
-import type { NewPlaceInput, SessionUser } from "@/lib/types";
+import type { NewPlaceInput, Place, SessionUser } from "@/lib/types";
 
 interface Props {
   user: SessionUser;
   isMobile: boolean;
   getMapCenter: () => { lat: number; lng: number };
+  editPlace?: Place | null;   // present → edit an existing spot instead of creating
   onClose: () => void;
   onSubmitted: (status: "approved" | "pending") => void;
+}
+
+// ISO timestamp → value for <input type="datetime-local"> (local wall time).
+function toLocalInput(iso: string | null): string {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 const inputStyle: React.CSSProperties = {
@@ -26,23 +35,28 @@ const labelStyle: React.CSSProperties = {
   marginBottom: 5, marginTop: 14,
 };
 
-export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onSubmitted }: Props) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [category, setCategory] = useState<Category>("food");
-  const [area, setArea] = useState("");
-  const [sourceUrl, setSourceUrl] = useState("");
-  const [eventStart, setEventStart] = useState("");
-  const [eventEnd, setEventEnd] = useState("");
+export default function SubmitSheet({ user, isMobile, getMapCenter, editPlace, onClose, onSubmitted }: Props) {
+  const isEdit = !!editPlace;
+  const [title, setTitle] = useState(editPlace?.title ?? "");
+  const [description, setDescription] = useState(editPlace?.description ?? "");
+  const [category, setCategory] = useState<Category>(editPlace?.category ?? "food");
+  const [area, setArea] = useState(editPlace?.area ?? "");
+  const [sourceUrl, setSourceUrl] = useState(editPlace?.source_url ?? "");
+  const [eventStart, setEventStart] = useState(toLocalInput(editPlace?.event_start ?? null));
+  const [eventEnd, setEventEnd] = useState(toLocalInput(editPlace?.event_end ?? null));
   const [locQuery, setLocQuery] = useState("");
   const [locResults, setLocResults] = useState<GeocodeResult[]>([]);
-  const [location, setLocation] = useState<GeocodeResult | null>(null);
+  const [location, setLocation] = useState<GeocodeResult | null>(
+    editPlace ? { label: editPlace.address ?? editPlace.area ?? "Current location", lat: editPlace.lat, lng: editPlace.lng } : null
+  );
   const [searching, setSearching] = useState(false);
   const [locating, setLocating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dupCandidate, setDupCandidate] = useState<NearbyPlace | null>(null);
-  const [imageUrls, setImageUrls] = useState<string[]>([]);
+  const [imageUrls, setImageUrls] = useState<string[]>(
+    editPlace?.image_urls?.length ? editPlace.image_urls : editPlace?.image_url ? [editPlace.image_url] : []
+  );
   const [uploading, setUploading] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -124,7 +138,8 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
     }
     setSaving(true);
     try {
-      if (!skipDupCheck) {
+      // Dup check only on new spots — editing an existing one is never a "dup".
+      if (!skipDupCheck && !isEdit) {
         // Warn-and-allow: same-ish name within ~75m → ask before saving.
         const nearby = await fetchNearbyPlaces(location.lat, location.lng).catch(() => []);
         const dup = findDuplicate(title.trim(), nearby);
@@ -134,13 +149,17 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
           return;
         }
       }
+      // Keep the original address when the pin wasn't moved during an edit.
+      const unchangedPin = isEdit && location.lat === editPlace!.lat && location.lng === editPlace!.lng;
       const input: NewPlaceInput = {
         title: title.trim(),
         description: description.trim(),
         category,
         lat: location.lat,
         lng: location.lng,
-        address: location.label.startsWith("Pinned on map") ? null : location.label.split(",").slice(0, 2).join(","),
+        address: unchangedPin ? editPlace!.address
+          : location.label.startsWith("Pinned on map") ? null
+          : location.label.split(",").slice(0, 2).join(","),
         area: area.trim() || null,
         image_url: imageUrls[0] ?? null,
         image_urls: imageUrls,
@@ -148,8 +167,13 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
         event_start: eventStart ? new Date(eventStart).toISOString() : null,
         event_end: eventEnd ? new Date(eventEnd).toISOString() : null,
       };
-      const status = await submitPlace(input, user);
-      onSubmitted(status);
+      if (isEdit) {
+        await updatePlace(editPlace!.id, input);
+        onSubmitted(editPlace!.status === "approved" ? "approved" : "pending");
+      } else {
+        const status = await submitPlace(input, user);
+        onSubmitted(status);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong.");
       setSaving(false);
@@ -171,7 +195,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
         display: "flex", alignItems: "center", justifyContent: "space-between",
       }}>
         <span style={{ fontFamily: "var(--font-display)", fontSize: 17, fontWeight: 700, color: DS.text }}>
-          Put something on the map
+          {isEdit ? "Edit this spot" : "Put something on the map"}
         </span>
         <button onClick={onClose} aria-label="Close" style={{
           border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 5,
@@ -354,9 +378,9 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
           background: saving ? DS.borderMd : DS.accent, color: "#fff", fontSize: 14.5,
           fontWeight: 700, cursor: "pointer", fontFamily: "inherit",
         }}>
-          {saving ? "Adding…" : user.isAdmin ? "Add to the map" : "Submit for review"}
+          {saving ? "Saving…" : isEdit ? "Save changes" : user.isAdmin ? "Add to the map" : "Submit for review"}
         </button>
-        {!user.isAdmin && (
+        {!user.isAdmin && !isEdit && (
           <div style={{ fontSize: 11.5, color: DS.textMut, marginTop: 8, textAlign: "center" }}>
             Submissions go live after a quick review.
           </div>

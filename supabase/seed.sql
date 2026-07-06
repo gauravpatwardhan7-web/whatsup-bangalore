@@ -78,25 +78,28 @@ values
    'Death by Chocolate. That''s it. That''s the description.',
    'food', 12.9668, 77.6069, 'Residency Road', 'Richmond Town', null, null, null, 'approved', 'curated');
 
--- Placeholder photos for the curated seeds (replace with real pics via the
--- dashboard or future admin edit — picsum images are stable per seed).
-update public.places set image_url = 'https://picsum.photos/seed/' || seed || '/600/400'
+-- Subject-appropriate real photos for the curated seeds via loremflickr
+-- (Creative Commons keyword search). The ?lock=<n> pins one stable image per
+-- place so they don't reshuffle on each load. Admins can swap in the exact
+-- venue photo anytime through the in-app edit sheet.
+update public.places
+  set image_url = 'https://loremflickr.com/600/400/' || keywords || '?lock=' || lock
 from (values
-  ('Toit Brewpub', 'toit'),
-  ('VV Puram Food Street', 'vvpuram'),
-  ('Blossom Book House', 'blossom'),
-  ('Cubbon Park', 'cubbon'),
-  ('Lalbagh Botanical Garden', 'lalbagh'),
-  ('The Rameshwaram Cafe', 'rameshwaram'),
-  ('Museum of Art & Photography (MAP)', 'mapmuseum'),
-  ('Byg Brewski Brewing Company', 'bygbrewski'),
-  ('Commercial Street', 'commercial'),
-  ('Nandi Hills Sunrise', 'nandihills'),
-  ('Church Street Social', 'churchstreet'),
-  ('The Bier Library', 'bierlibrary'),
-  ('Ranga Shankara', 'rangashankara'),
-  ('Sunday Soul Sante', 'soulsante'),
-  ('Gig Night at Fandom', 'fandom'),
-  ('Corner House Ice Cream', 'cornerhouse')
-) as pics(title, seed)
+  ('Toit Brewpub', 'brewery,beer', 101),
+  ('VV Puram Food Street', 'indian,streetfood', 102),
+  ('Blossom Book House', 'bookstore,books', 103),
+  ('Cubbon Park', 'park,trees', 104),
+  ('Lalbagh Botanical Garden', 'botanical,garden', 105),
+  ('The Rameshwaram Cafe', 'dosa,southindianfood', 106),
+  ('Museum of Art & Photography (MAP)', 'artgallery,museum', 107),
+  ('Byg Brewski Brewing Company', 'brewpub,beer', 108),
+  ('Commercial Street', 'market,shopping', 109),
+  ('Nandi Hills Sunrise', 'sunrise,hills', 110),
+  ('Church Street Social', 'cafe,bar', 111),
+  ('The Bier Library', 'craftbeer,pub', 112),
+  ('Ranga Shankara', 'theatre,stage', 113),
+  ('Sunday Soul Sante', 'fleamarket,market', 114),
+  ('Gig Night at Fandom', 'concert,music', 115),
+  ('Corner House Ice Cream', 'icecream,dessert', 116)
+) as pics(title, keywords, lock)
 where places.title = pics.title and places.source = 'curated';
