@@ -178,6 +178,18 @@ export async function submitPlace(input: NewPlaceInput, user: SessionUser): Prom
   return status;
 }
 
+// Edit an existing place. Authors may edit their own; admins may edit any
+// (enforced by RLS). Non-admin edits can't change moderation status (DB trigger).
+export async function updatePlace(placeId: string, input: NewPlaceInput): Promise<void> {
+  if (MOCK_MODE) {
+    mockPlaces = mockPlaces.map((p) => (p.id === placeId ? { ...p, ...input } : p));
+    return;
+  }
+  const sb = supabaseBrowser();
+  const { error } = await sb.from("places").update(input).eq("id", placeId);
+  if (error) throw error;
+}
+
 // ── images ───────────────────────────────────────────────────────────────────
 export async function uploadImage(rawFile: File, user: SessionUser): Promise<string> {
   // Phone photos routinely exceed 5 MB — compress client-side before upload.

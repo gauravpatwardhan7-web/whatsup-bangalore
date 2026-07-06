@@ -11,15 +11,18 @@ interface Props {
   user: SessionUser | null;
   isMobile: boolean;
   onClose: () => void;
+  onEdit: (place: Place) => void;
   onVoteToggled: (place: Place) => void;
   onCommentAdded: (place: Place) => void;
   onSignInNeeded: () => void;
 }
 
 export default function PlaceSheet({
-  place, user, isMobile, onClose, onVoteToggled, onCommentAdded, onSignInNeeded,
+  place, user, isMobile, onClose, onEdit, onVoteToggled, onCommentAdded, onSignInNeeded,
 }: Props) {
   const cat = CATEGORIES[place.category];
+  // Author can edit their own; admin can edit anything (incl. curated seeds).
+  const canEdit = !!user && (user.isAdmin || (!!place.created_by && place.created_by === user.id));
   const tier = placeTier(place);
   // Keyed by place id so switching places shows "Loading…" without a reset call.
   const [loaded, setLoaded] = useState<{ placeId: string; rows: PlaceComment[] } | null>(null);
@@ -101,10 +104,19 @@ export default function PlaceSheet({
               {cat.label}{place.area ? ` · ${place.area}` : ""}{place.address ? ` · ${place.address}` : ""}
             </div>
           </div>
-          <button onClick={onClose} aria-label="Close" style={{
-            border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 5,
-            width: 28, height: 28, cursor: "pointer", color: DS.textSub, fontSize: 15, flexShrink: 0,
-          }}>✕</button>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+            {canEdit && (
+              <button onClick={() => onEdit(place)} aria-label="Edit this spot" title="Edit" style={{
+                border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 5,
+                height: 28, padding: "0 10px", cursor: "pointer", color: DS.textSub,
+                fontSize: 12.5, fontWeight: 700, fontFamily: "inherit",
+              }}>✎ Edit</button>
+            )}
+            <button onClick={onClose} aria-label="Close" style={{
+              border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 5,
+              width: 28, height: 28, cursor: "pointer", color: DS.textSub, fontSize: 15,
+            }}>✕</button>
+          </div>
         </div>
         {(tier.label || place.event_start) && (
           <div style={{ display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" }}>

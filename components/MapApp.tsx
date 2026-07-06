@@ -40,6 +40,7 @@ export default function MapApp() {
   const [pendingCount, setPendingCount] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSubmit, setShowSubmit] = useState(false);
+  const [editPlace, setEditPlace] = useState<Place | null>(null);
   const [listOpen, setListOpen] = useState(true);
   const [sort, setSort] = useState<SortMode>("trending");
   const [activeCats, setActiveCats] = useState<Set<Category>>(new Set());
@@ -339,6 +340,7 @@ export default function MapApp() {
           user={user}
           isMobile={isMobile}
           onClose={() => setSelectedId(null)}
+          onEdit={(p) => { setSelectedId(null); setEditPlace(p); setShowSubmit(true); }}
           onVoteToggled={updatePlace}
           onCommentAdded={updatePlace}
           onSignInNeeded={handleSignIn}
@@ -350,11 +352,16 @@ export default function MapApp() {
         <SubmitSheet
           user={user}
           isMobile={isMobile}
+          editPlace={editPlace}
           getMapCenter={() => mapCenterRef.current}
-          onClose={() => setShowSubmit(false)}
+          onClose={() => { setShowSubmit(false); setEditPlace(null); }}
           onSubmitted={async (status) => {
+            const wasEdit = !!editPlace;
             setShowSubmit(false);
-            setToast(status === "approved" ? "It's on the map! 🎉" : "Submitted — it'll go live after review. 🙌");
+            setEditPlace(null);
+            setToast(wasEdit
+              ? "Changes saved. ✅"
+              : status === "approved" ? "It's on the map! 🎉" : "Submitted — it'll go live after review. 🙌");
             setPlaces(await fetchPlaces());
           }}
         />
