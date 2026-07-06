@@ -251,7 +251,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, editPlace, o
             <div style={{ display: "flex", gap: 7, marginTop: 7, flexWrap: "wrap" }}>
               <button onClick={useMyLocation} disabled={locating} style={{
                 padding: "8px 12px", borderRadius: 5, cursor: "pointer",
-                border: `1.5px solid ${DS.accent}`, background: "#eff3ec", fontSize: 12.5,
+                border: `1.5px solid ${DS.accent}`, background: "#eaf1fe", fontSize: 12.5,
                 fontWeight: 700, color: DS.accent, fontFamily: "inherit",
               }}>
                 {locating ? "Locating…" : "📍 Use my current location"}
