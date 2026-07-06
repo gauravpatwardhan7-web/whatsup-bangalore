@@ -47,6 +47,15 @@ The one that prompted this. Two people add the same place (accidentally, or deli
 
 ## Feature ideas
 
+### Real venue photos via Google Places (idea; prototype removed 2026-07-06)
+The keyword stock images (loremflickr) don't match the actual venues. Better: pull the real photo of each place from **Google Places (New)** — Text Search biased to the pin → top photo → self-host it in the Supabase `place-images` bucket (Google's photo URLs expire; ours don't), then point `image_url`/`image_urls` at our copy. Do it as a one-off backfill for the 16 seeds + existing places, and a real-photo-first path (keyword fallback) when the Reddit pipeline creates a new place.
+- A working prototype existed on branch `google-places-photos` but was removed to avoid committing to Google billing; rebuild when revisiting.
+- Needs a Google Cloud key with **Places API (New)** + billing enabled (`GOOGLE_PLACES_API_KEY`). Volume (16 + a few/day) sits inside the free monthly tier, but a card must be on file — hence parked.
+- **Applying it costs no Netlify deploy** (backfill writes straight to Supabase); only the ingest-script change needs one deploy — batch it.
+
+### Cost note — Netlify production deploys (2026-07-06)
+Each merge to `main` triggers a Netlify production build (~15 credits; budget ~300/mo ≈ 20 deploys/mo). **Batch changes into one PR per deploy**, not one PR per change. Data-only work costs nothing: image backfills, seed/`image_url` updates run directly against Supabase; the daily Reddit pipeline is a GitHub Action that writes to Supabase (no deploy); end-user photo uploads go browser→Supabase storage (not through Netlify).
+
 ### Account / activity hub — "my contributions" + been-there / collectibles
 A personal page collecting everything a signed-in user has done, so activity isn't scattered across individual places. (Prompted by: hard to find your own comment when you don't remember which place it's under.)
 - **My activity**: every comment I've posted, every place I've upvoted, every spot I've submitted — each linking back to its place on the map. One place to see "what have I said / done".
