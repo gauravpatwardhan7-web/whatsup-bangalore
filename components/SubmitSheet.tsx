@@ -42,21 +42,25 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dupCandidate, setDupCandidate] = useState<NearbyPlace | null>(null);
-  const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [imageUrls, setImageUrls] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  async function handleFile(file: File | undefined) {
-    if (!file) return;
+  async function handleFiles(files: FileList | null) {
+    if (!files?.length) return;
     setError(null);
     setUploading(true);
     try {
-      setImageUrl(await uploadImage(file, user));
+      for (const file of Array.from(files)) {
+        const url = await uploadImage(file, user);
+        setImageUrls((prev) => [...prev, url]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Upload failed.");
     } finally {
       setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
     }
   }
 
@@ -138,7 +142,8 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
         lng: location.lng,
         address: location.label.startsWith("Pinned on map") ? null : location.label.split(",").slice(0, 2).join(","),
         area: area.trim() || null,
-        image_url: imageUrl,
+        image_url: imageUrls[0] ?? null,
+        image_urls: imageUrls,
         source_url: sourceUrl.trim() || null,
         event_start: eventStart ? new Date(eventStart).toISOString() : null,
         event_end: eventEnd ? new Date(eventEnd).toISOString() : null,
@@ -248,33 +253,43 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, onClose, onS
           value={description} onChange={(e) => setDescription(e.target.value)}
           placeholder="What should people know before they go?" />
 
-        <label style={labelStyle}>Photo (optional — a good pic gets people out the door)</label>
-        <input ref={fileInputRef} type="file" accept="image/*" style={{ display: "none" }}
-          onChange={(e) => handleFile(e.target.files?.[0])} />
-        {imageUrl ? (
-          <div style={{ position: "relative" }}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={imageUrl} alt="Preview" style={{
-              width: "100%", maxHeight: 160, objectFit: "cover", borderRadius: 6,
-              border: `1.5px solid ${DS.border}`,
-            }} />
-            <button onClick={() => setImageUrl(null)} style={{
-              position: "absolute", top: 8, right: 8, border: "none", cursor: "pointer",
-              background: "rgba(0,0,0,0.55)", color: "#fff", borderRadius: 5,
-              padding: "4px 10px", fontSize: 11.5, fontWeight: 700, fontFamily: "inherit",
-            }}>
-              Remove
-            </button>
+        <label style={labelStyle}>Photos (optional — a good pic gets people out the door)</label>
+        <input ref={fileInputRef} type="file" accept="image/*" multiple style={{ display: "none" }}
+          onChange={(e) => handleFiles(e.target.files)} />
+        {imageUrls.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7, marginBottom: 7 }}>
+            {imageUrls.map((url, i) => (
+              <div key={i} style={{ position: "relative", width: 104, height: 78 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={url} alt={`Photo ${i + 1}`} style={{
+                  width: "100%", height: "100%", objectFit: "cover", borderRadius: 6,
+                  border: `1.5px solid ${DS.border}`,
+                }} />
+                {i === 0 && imageUrls.length > 1 && (
+                  <span style={{
+                    position: "absolute", bottom: 4, left: 4, background: "rgba(0,0,0,0.55)",
+                    color: "#fff", borderRadius: 4, padding: "1px 6px", fontSize: 10, fontWeight: 700,
+                  }}>cover</span>
+                )}
+                <button onClick={() => setImageUrls((prev) => prev.filter((_, j) => j !== i))}
+                  aria-label={`Remove photo ${i + 1}`} style={{
+                    position: "absolute", top: 4, right: 4, border: "none", cursor: "pointer",
+                    background: "rgba(0,0,0,0.55)", color: "#fff", borderRadius: 4,
+                    width: 20, height: 20, fontSize: 11, fontWeight: 700, fontFamily: "inherit",
+                    lineHeight: "20px", padding: 0,
+                  }}>✕</button>
+              </div>
+            ))}
           </div>
-        ) : (
-          <button onClick={() => fileInputRef.current?.click()} disabled={uploading} style={{
-            width: "100%", padding: "18px 12px", borderRadius: 6, cursor: "pointer",
-            border: `1.5px dashed ${DS.borderMd}`, background: DS.bg, fontSize: 13,
-            fontWeight: 600, color: uploading ? DS.textMut : DS.textSub, fontFamily: "inherit",
-          }}>
-            {uploading ? "Uploading…" : "📸 Add a photo"}
-          </button>
         )}
+        <button onClick={() => fileInputRef.current?.click()} disabled={uploading} style={{
+          width: "100%", padding: imageUrls.length ? "10px 12px" : "18px 12px", borderRadius: 6,
+          cursor: "pointer",
+          border: `1.5px dashed ${DS.borderMd}`, background: DS.bg, fontSize: 13,
+          fontWeight: 600, color: uploading ? DS.textMut : DS.textSub, fontFamily: "inherit",
+        }}>
+          {uploading ? "Uploading…" : imageUrls.length ? "📸 Add more photos" : "📸 Add photos"}
+        </button>
 
         <label style={labelStyle}>Area (optional)</label>
         <input style={inputStyle} value={area} onChange={(e) => setArea(e.target.value)}
