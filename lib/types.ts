@@ -9,7 +9,8 @@ export interface Place {
   lng: number;
   address: string | null;
   area: string | null;
-  image_url: string | null;
+  image_url: string | null;      // cover photo (first of image_urls)
+  image_urls?: string[] | null;  // all photos; optional for pre-migration rows/mocks
   source_url: string | null;
   event_start: string | null;
   event_end: string | null;
@@ -49,6 +50,7 @@ export interface NewPlaceInput {
   address: string | null;
   area: string | null;
   image_url: string | null;
+  image_urls: string[];
   source_url: string | null;
   event_start: string | null;
   event_end: string | null;

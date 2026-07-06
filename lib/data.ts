@@ -2,6 +2,7 @@
 
 import { MOCK_MODE, supabaseBrowser } from "./supabase/client";
 import { MOCK_COMMENTS, MOCK_PLACES } from "./mock-data";
+import { compressImage } from "./image";
 import type { NewPlaceInput, Place, PlaceComment, SessionUser } from "./types";
 
 // ── mock state (in-memory, session only) ────────────────────────────────────
@@ -178,8 +179,9 @@ export async function submitPlace(input: NewPlaceInput, user: SessionUser): Prom
 }
 
 // ── images ───────────────────────────────────────────────────────────────────
-export async function uploadImage(file: File, user: SessionUser): Promise<string> {
-  if (file.size > 5 * 1024 * 1024) throw new Error("Image too large — max 5 MB.");
+export async function uploadImage(rawFile: File, user: SessionUser): Promise<string> {
+  // Phone photos routinely exceed 5 MB — compress client-side before upload.
+  const file = await compressImage(rawFile);
   if (MOCK_MODE) {
     // Demo mode: inline the image as a data URL (survives only this session).
     return new Promise((resolve, reject) => {

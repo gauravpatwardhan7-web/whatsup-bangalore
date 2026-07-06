@@ -130,13 +130,34 @@ export default function PlaceSheet({
       </div>
 
       <div style={{ overflowY: "auto", padding: "14px 16px" }}>
-        {place.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={place.image_url} alt={place.title} style={{
-            width: "100%", height: 180, borderRadius: 6, marginBottom: 12, objectFit: "cover",
-            border: `1px solid ${DS.border}`,
-          }} />
-        ) : (
+        {(() => {
+          // Older rows only have image_url; newer ones carry the full set.
+          const photos = place.image_urls?.length ? place.image_urls
+            : place.image_url ? [place.image_url] : [];
+          if (photos.length === 0) return null;
+          if (photos.length === 1) {
+            // eslint-disable-next-line @next/next/no-img-element
+            return <img src={photos[0]} alt={place.title} style={{
+              width: "100%", height: 180, borderRadius: 6, marginBottom: 12, objectFit: "cover",
+              border: `1px solid ${DS.border}`,
+            }} />;
+          }
+          return (
+            <div style={{
+              display: "flex", gap: 8, overflowX: "auto", marginBottom: 12,
+              scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch",
+            }}>
+              {photos.map((url, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img key={i} src={url} alt={`${place.title} — photo ${i + 1}`} style={{
+                  height: 180, minWidth: "78%", borderRadius: 6, objectFit: "cover",
+                  border: `1px solid ${DS.border}`, scrollSnapAlign: "start",
+                }} />
+              ))}
+            </div>
+          );
+        })()}
+        {!(place.image_urls?.length || place.image_url) && (
           <div style={{
             width: "100%", height: 110, borderRadius: 6, marginBottom: 12,
             background: `linear-gradient(135deg, ${cat.tint}, ${cat.color}22)`,
