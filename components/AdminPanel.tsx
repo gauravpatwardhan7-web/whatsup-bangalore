@@ -60,7 +60,7 @@ export default function AdminPanel() {
             padding: "7px 14px", borderRadius: 5, cursor: "pointer", fontSize: 13,
             fontWeight: 700, fontFamily: "inherit", textTransform: "capitalize",
             border: `1.5px solid ${tab === t ? DS.accent : DS.border}`,
-            background: tab === t ? "#eff3ec" : "#fff",
+            background: tab === t ? "#eaf1fe" : "#fff",
             color: tab === t ? DS.accent : DS.textSub,
           }}>
             {t} ({counts[t]})
