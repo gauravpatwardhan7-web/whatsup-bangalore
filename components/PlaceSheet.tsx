@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CATEGORIES, DS, FLOAT_SHADOW, placeTier } from "@/lib/ds";
-import { addComment, fetchComments, setVote } from "@/lib/data";
+import { addComment, fetchComments, fetchPlaceSignals, setVote, type PlaceSignal } from "@/lib/data";
 import { formatEventWindow, timeAgo } from "@/lib/format";
 import type { Place, PlaceComment, SessionUser } from "@/lib/types";
 
@@ -17,6 +17,14 @@ interface Props {
   onSignInNeeded: () => void;
 }
 
+// Display metadata for external-mention platforms in the "why it's trending" block.
+const PLATFORM_META: Record<PlaceSignal["platform"], { label: string; emoji: string }> = {
+  reddit: { label: "Reddit", emoji: "🟠" },
+  instagram: { label: "Instagram", emoji: "📸" },
+  x: { label: "X", emoji: "✖️" },
+  news: { label: "News", emoji: "📰" },
+};
+
 export default function PlaceSheet({
   place, user, isMobile, onClose, onEdit, onVoteToggled, onCommentAdded, onSignInNeeded,
 }: Props) {
@@ -30,6 +38,18 @@ export default function PlaceSheet({
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
   const [postError, setPostError] = useState<string | null>(null);
+  const [signalState, setSignalState] = useState<{ placeId: string; rows: PlaceSignal[] } | null>(null);
+  const signals = signalState?.placeId === place.id ? signalState.rows : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchPlaceSignals(place.id).then((rows) => {
+      if (!cancelled) setSignalState({ placeId: place.id, rows });
+    }).catch(() => {
+      if (!cancelled) setSignalState({ placeId: place.id, rows: [] });
+    });
+    return () => { cancelled = true; };
+  }, [place.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -189,6 +209,47 @@ export default function PlaceSheet({
             View source ↗
           </a>
         )}
+
+        {/* Transparency: show what's actually driving the trending badge —
+            upvotes, discussion, and external mentions (with links to the source). */}
+        {(() => {
+          const chips: React.ReactNode[] = [];
+          const chipStyle: React.CSSProperties = {
+            display: "inline-flex", alignItems: "center", gap: 5, padding: "5px 10px",
+            borderRadius: 999, fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+            border: `1px solid ${DS.border}`, background: "#fff", color: DS.text, textDecoration: "none",
+          };
+          if (place.vote_count > 0) {
+            chips.push(<span key="v" style={chipStyle}>▲ {place.vote_count} upvote{place.vote_count === 1 ? "" : "s"}</span>);
+          }
+          if (place.comment_count > 0) {
+            chips.push(<span key="c" style={chipStyle}>💬 {place.comment_count} comment{place.comment_count === 1 ? "" : "s"}</span>);
+          }
+          for (const s of signals) {
+            const meta = PLATFORM_META[s.platform];
+            const label = `${meta.emoji} ${meta.label} · ${s.count} mention${s.count === 1 ? "" : "s"}`;
+            chips.push(s.topUrl ? (
+              <a key={s.platform} href={s.topUrl} target="_blank" rel="noopener noreferrer"
+                title={s.topTitle ?? undefined} style={{ ...chipStyle, color: DS.accent, borderColor: DS.accent }}>
+                {label} ↗
+              </a>
+            ) : (
+              <span key={s.platform} style={chipStyle}>{label}</span>
+            ));
+          }
+          if (chips.length === 0) return null;
+          return (
+            <div style={{ marginTop: 14 }}>
+              <div style={{
+                fontSize: 11, fontWeight: 700, color: DS.textSub, textTransform: "uppercase",
+                letterSpacing: 0.4, marginBottom: 8,
+              }}>
+                Why it&rsquo;s {tier.label ? tier.label.toLowerCase() : "on the map"}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>{chips}</div>
+            </div>
+          );
+        })()}
 
         {/* One-tap directions: opens Google Maps navigation to the pin.
             Uses coordinates so it works even when there's no street address. */}

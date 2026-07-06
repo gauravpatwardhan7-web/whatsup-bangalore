@@ -75,6 +75,35 @@ export async function fetchPlaceStats(placeId: string): Promise<PlaceStats | nul
   return data as PlaceStats;
 }
 
+// External-signal breakdown for a place: how many times it's been mentioned on
+// each platform (Reddit/Instagram/X/News), with the top mention's link. Powers
+// the "why it's trending" transparency block. Mentions are publicly readable.
+export interface PlaceSignal {
+  platform: "reddit" | "instagram" | "x" | "news";
+  count: number;
+  topUrl: string | null;
+  topTitle: string | null;
+}
+
+export async function fetchPlaceSignals(placeId: string): Promise<PlaceSignal[]> {
+  if (MOCK_MODE) return [];
+  const sb = supabaseBrowser();
+  const { data, error } = await sb
+    .from("mentions")
+    .select("platform, url, title, engagement_score")
+    .eq("place_id", placeId)
+    .order("engagement_score", { ascending: false });
+  if (error) return [];
+  // Group by platform, keeping the first (highest-engagement) row as the link.
+  const byPlatform = new Map<string, PlaceSignal>();
+  for (const m of data ?? []) {
+    const existing = byPlatform.get(m.platform);
+    if (existing) existing.count++;
+    else byPlatform.set(m.platform, { platform: m.platform as PlaceSignal["platform"], count: 1, topUrl: m.url, topTitle: m.title });
+  }
+  return [...byPlatform.values()];
+}
+
 // Subscribe to all vote/comment changes; calls back with the affected place_id.
 // Returns an unsubscribe function. No-op in mock mode.
 export function subscribeToActivity(onChange: (placeId: string) => void): () => void {
