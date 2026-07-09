@@ -24,7 +24,7 @@
 
 import { fileURLToPath } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { CATEGORIES, type Category } from "../lib/ds";
 import { searchBangalore } from "../lib/geocode";
@@ -329,7 +329,7 @@ async function main() {
   const posts = await fetchHotPosts();
   console.log(`Fetched ${posts.length} post(s) from ${SUBREDDITS.map((s) => `r/${s}`).join(", ")} (via Arctic Shift, ${MIN_AGE_DAYS}-${LOOKBACK_DAYS}d old).`);
 
-  const supabase = canWrite ? createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false }, realtime: { transport: ws } }) : null;
+  const supabase = canWrite ? createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false }, realtime: { transport: ws as unknown as WebSocketLikeConstructor } }) : null;
 
   // Skip posts we've already extracted from (dedupe work, not just rows).
   let seenUrls = new Set<string>();

@@ -19,7 +19,7 @@
  */
 
 import { fileURLToPath } from "node:url";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { findPlace, fetchPlacePhoto, placesApiKey } from "../lib/places-api";
 
@@ -45,7 +45,7 @@ async function main() {
     return;
   }
 
-  const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false }, realtime: { transport: ws } });
+  const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false }, realtime: { transport: ws as unknown as WebSocketLikeConstructor } });
   const { data: places, error } = await supabase
     .from("places")
     .select("id, title, area, image_url")

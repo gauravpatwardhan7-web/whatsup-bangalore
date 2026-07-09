@@ -21,7 +21,7 @@
 
 import { fileURLToPath } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { CATEGORIES, type Category } from "../lib/ds";
 import { searchBangalore } from "../lib/geocode";
@@ -247,7 +247,7 @@ async function main() {
   const videos = await fetchVideos(ytKey);
   console.log(`Fetched ${videos.length} video(s) (last ${LOOKBACK_DAYS}d, top by engagement).`);
 
-  const supabase = canWrite ? createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false }, realtime: { transport: ws } }) : null;
+  const supabase = canWrite ? createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false }, realtime: { transport: ws as unknown as WebSocketLikeConstructor } }) : null;
 
   let seenUrls = new Set<string>();
   let existingPlaces: { id: string; title: string; lat: number; lng: number }[] = [];

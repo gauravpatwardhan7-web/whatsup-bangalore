@@ -18,7 +18,7 @@
  */
 
 import { fileURLToPath } from "node:url";
-import { createClient } from "@supabase/supabase-js";
+import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 
 const APP_URL = "https://whatsupbangalore.netlify.app";
@@ -105,7 +105,7 @@ async function main() {
   }
 
   if (!supabaseUrl || !serviceKey) return;
-  const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false }, realtime: { transport: ws } });
+  const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false }, realtime: { transport: ws as unknown as WebSocketLikeConstructor } });
 
   const { data, error } = await supabase
     .from("places_with_stats")
