@@ -23,6 +23,7 @@ const PLATFORM_META: Record<PlaceSignal["platform"], { label: string; emoji: str
   instagram: { label: "Instagram", emoji: "📸" },
   x: { label: "X", emoji: "✖️" },
   news: { label: "News", emoji: "📰" },
+  youtube: { label: "YouTube", emoji: "▶️" },
 };
 
 export default function PlaceSheet({

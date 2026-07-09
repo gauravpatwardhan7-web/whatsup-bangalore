@@ -3,7 +3,7 @@
 The one file to read when starting a session and update before ending one. If this
 disagrees with memory or chat, **this file wins**. Keep it short and current.
 
-**Last updated:** 2026-07-05 · **Phase:** Live on Netlify (prod); Phase 2 (Reddit ingestion) wired & CI-green — awaiting first live run after Gemini quota reset
+**Last updated:** 2026-07-09 · **Phase:** Live on Netlify (prod); big feature batch (search, pin-drop, newsletter, YouTube, rename, stable images, Places API scaffolding) built & verified locally — **uncommitted**, pending one batched deploy + migration `0008` + new GitHub secrets
 
 ---
 
@@ -66,7 +66,14 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 - **Migrations:** `supabase/migrations/` (run in order in the SQL Editor)
 - **Repo:** https://github.com/gauravpatwardhan7-web/whatsup-bangalore
 
+## Pending activation (this batch)
+- Run `supabase/migrations/0008_youtube_and_stable_images.sql` in the SQL Editor (adds `youtube` to platform/source checks; the stable-image data fix was **already applied live** via REST on 2026-07-09).
+- GitHub secrets to add when ready: `RESEND_API_KEY` (+ optional `NEWSLETTER_FROM` after domain verification) for the Thursday newsletter; `YOUTUBE_API_KEY` for YouTube ingestion (both workflows no-op/dry-run politely without them).
+- Real Google Places key → set `GOOGLE_PLACES_API_KEY` in `.env.local`, run `npm run photos:refresh` for real venue photos (demo key in env is a non-working placeholder; precedence handled in `lib/places-api.ts`).
+- Commit + push this batch as **one deploy** (Netlify credit budget).
+
 ## Session log
+- 2026-07-09 — Feature batch: renamed app to **What's Trending Bangalore**; search bar in the list panel (filters list + map pins); true pin-drop on the map from the submit sheet (tap anywhere, crosshair cursor); past events auto-hidden from the feed; weekly Thursday newsletter (`scripts/send-newsletter.ts` + workflow, Resend-backed, provider-swappable); Reddit ingestion broadened to 5 BLR subreddits (env-overridable); YouTube ingestion added (`scripts/ingest-youtube.ts`, needs `YOUTUBE_API_KEY`); fixed daily-changing seed images (loremflickr re-indexes → switched to deterministic picsum seeds; live DB rows patched via REST); Google Places API scaffolding (`lib/places-api.ts` + `npm run photos:refresh`, swappable demo→real key). Lint/build green; UI verified in preview. See "Pending activation".
 - 2026-07-03 — MVP built; Supabase + Google auth connected live; photos on all spots; locate-me; live buzz tiers + realtime code; spec-kit + this tracker added. Pending: run `0003_realtime.sql`, verify realtime.
 - 2026-07-03 (later) — Guardrails slice 1: dup-detection warning on submit, BLR bounding-box check, event-date validation, description-label clarity. Pending: signed-in manual pass of the dup-warning flow.
 - 2026-07-04 — Dev-env fixes: pinned `turbopack.root` (stray `~/package-lock.json` broke workspace-root inference), launch.json `autoPort` so preview servers don't fight over port 3000. Verified app serves clean after a `.next` cache wipe. No product changes.

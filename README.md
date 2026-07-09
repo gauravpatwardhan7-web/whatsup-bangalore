@@ -1,4 +1,4 @@
-# Whatsup Bangalore 🔥
+# What's Trending Bangalore 🔥
 
 A living map of what's trending in Bengaluru — places, events, and experiences, upvoted by the people who actually went. Think "Instagram discovery page, but on a map, with memory."
 

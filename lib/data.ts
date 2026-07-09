@@ -3,6 +3,7 @@
 import { MOCK_MODE, supabaseBrowser } from "./supabase/client";
 import { MOCK_COMMENTS, MOCK_PLACES } from "./mock-data";
 import { compressImage } from "./image";
+import { isPastEvent } from "./format";
 import type { NewPlaceInput, Place, PlaceComment, SessionUser } from "./types";
 
 // ── mock state (in-memory, session only) ────────────────────────────────────
@@ -41,7 +42,8 @@ export async function signOut(): Promise<void> {
 
 // ── places ───────────────────────────────────────────────────────────────────
 export async function fetchPlaces(): Promise<Place[]> {
-  if (MOCK_MODE) return mockPlaces.filter((p) => p.status === "approved");
+  // Events that already ended are noise on a "what's happening" map — drop them.
+  if (MOCK_MODE) return mockPlaces.filter((p) => p.status === "approved" && !isPastEvent(p));
   const sb = supabaseBrowser();
   const { data, error } = await sb
     .from("places_with_stats")
@@ -49,7 +51,7 @@ export async function fetchPlaces(): Promise<Place[]> {
     .eq("status", "approved")
     .order("trending_score", { ascending: false });
   if (error) throw error;
-  return (data ?? []) as Place[];
+  return ((data ?? []) as Place[]).filter((p) => !isPastEvent(p));
 }
 
 // Fresh live counts for a single place (used by the realtime refresh).
@@ -79,7 +81,7 @@ export async function fetchPlaceStats(placeId: string): Promise<PlaceStats | nul
 // each platform (Reddit/Instagram/X/News), with the top mention's link. Powers
 // the "why it's trending" transparency block. Mentions are publicly readable.
 export interface PlaceSignal {
-  platform: "reddit" | "instagram" | "x" | "news";
+  platform: "reddit" | "instagram" | "x" | "news" | "youtube";
   count: number;
   topUrl: string | null;
   topTitle: string | null;

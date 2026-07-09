@@ -78,28 +78,12 @@ values
    'Death by Chocolate. That''s it. That''s the description.',
    'food', 12.9668, 77.6069, 'Residency Road', 'Richmond Town', null, null, null, 'approved', 'curated');
 
--- Subject-appropriate real photos for the curated seeds via loremflickr
--- (Creative Commons keyword search). The ?lock=<n> pins one stable image per
--- place so they don't reshuffle on each load. Admins can swap in the exact
--- venue photo anytime through the in-app edit sheet.
+-- One stable image per curated seed. Picsum /seed/ URLs are deterministic
+-- forever (loremflickr's ?lock re-indexed daily, so photos kept changing).
+-- Real venue photos: scripts/refresh-place-photos.ts (Google Places) or an
+-- admin swap through the in-app edit sheet.
 update public.places
-  set image_url = 'https://loremflickr.com/600/400/' || keywords || '?lock=' || lock
-from (values
-  ('Toit Brewpub', 'brewery,beer', 101),
-  ('VV Puram Food Street', 'indian,streetfood', 102),
-  ('Blossom Book House', 'bookstore,books', 103),
-  ('Cubbon Park', 'park,trees', 104),
-  ('Lalbagh Botanical Garden', 'botanical,garden', 105),
-  ('The Rameshwaram Cafe', 'dosa,southindianfood', 106),
-  ('Museum of Art & Photography (MAP)', 'artgallery,museum', 107),
-  ('Byg Brewski Brewing Company', 'brewpub,beer', 108),
-  ('Commercial Street', 'market,shopping', 109),
-  ('Nandi Hills Sunrise', 'sunrise,hills', 110),
-  ('Church Street Social', 'cafe,bar', 111),
-  ('The Bier Library', 'craftbeer,pub', 112),
-  ('Ranga Shankara', 'theatre,stage', 113),
-  ('Sunday Soul Sante', 'fleamarket,market', 114),
-  ('Gig Night at Fandom', 'concert,music', 115),
-  ('Corner House Ice Cream', 'icecream,dessert', 116)
-) as pics(title, keywords, lock)
-where places.title = pics.title and places.source = 'curated';
+  set image_url = 'https://picsum.photos/seed/'
+    || regexp_replace(lower(title), '[^a-z0-9]+', '-', 'g')
+    || '/600/400'
+where source = 'curated';

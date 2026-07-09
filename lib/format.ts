@@ -17,6 +17,14 @@ export function formatEventWindow(start: string, end: string | null): string {
   return `${day}, ${st} – ${et}`;
 }
 
+// An event is over once its end has passed (or its start, when it has no end).
+export function isPastEvent(p: { category: string; event_start: string | null; event_end: string | null }): boolean {
+  if (p.category !== "event") return false;
+  const cutoff = p.event_end ?? p.event_start;
+  if (!cutoff) return false;
+  return new Date(cutoff).getTime() < Date.now();
+}
+
 // "This weekend" = from now through the end of the coming Sunday.
 export function isThisWeekend(eventStart: string | null): boolean {
   if (!eventStart) return false;

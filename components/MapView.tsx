@@ -15,17 +15,22 @@ interface Props {
   selectedId: string | null;
   onSelect: (place: Place) => void;
   onCenterChange?: (center: { lat: number; lng: number }) => void;
+  onMapClick?: (point: { lat: number; lng: number }) => void;
+  // Pin-drop mode: crosshair cursor while the submit flow waits for a map tap.
+  picking?: boolean;
 }
 
-export default function MapView({ places, selectedId, onSelect, onCenterChange }: Props) {
+export default function MapView({ places, selectedId, onSelect, onCenterChange, onMapClick, picking }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const markersRef = useRef<Map<string, maplibregl.Marker>>(new Map());
   const onSelectRef = useRef(onSelect);
   const onCenterChangeRef = useRef(onCenterChange);
+  const onMapClickRef = useRef(onMapClick);
   useEffect(() => {
     onSelectRef.current = onSelect;
     onCenterChangeRef.current = onCenterChange;
+    onMapClickRef.current = onMapClick;
   });
 
   useEffect(() => {
@@ -50,6 +55,9 @@ export default function MapView({ places, selectedId, onSelect, onCenterChange }
     map.on("moveend", () => {
       const c = map.getCenter();
       onCenterChangeRef.current?.({ lat: c.lat, lng: c.lng });
+    });
+    map.on("click", (e) => {
+      onMapClickRef.current?.({ lat: e.lngLat.lat, lng: e.lngLat.lng });
     });
     mapRef.current = map;
     // Keep the canvas sized to the container (it can be mis-measured at mount).
@@ -108,6 +116,12 @@ export default function MapView({ places, selectedId, onSelect, onCenterChange }
       map.flyTo({ center: [place.lng, place.lat], zoom: Math.max(map.getZoom(), 13.5), duration: 800 });
     }
   }, [selectedId, places]);
+
+  // MapLibre manages the canvas cursor itself (grab/grabbing), so override there.
+  useEffect(() => {
+    const canvas = mapRef.current?.getCanvas();
+    if (canvas) canvas.style.cursor = picking ? "crosshair" : "";
+  }, [picking]);
 
   return <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />;
 }

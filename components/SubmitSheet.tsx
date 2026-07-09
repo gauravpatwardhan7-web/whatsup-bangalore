@@ -12,6 +12,11 @@ interface Props {
   isMobile: boolean;
   getMapCenter: () => { lat: number; lng: number };
   editPlace?: Place | null;   // present → edit an existing spot instead of creating
+  // Pin-drop flow: onPickOnMap hides this sheet so the user can tap the map;
+  // the tapped point comes back via pickedPin (hidden=true while waiting).
+  hidden?: boolean;
+  pickedPin?: { lat: number; lng: number } | null;
+  onPickOnMap?: () => void;
   onClose: () => void;
   onSubmitted: (status: "approved" | "pending") => void;
 }
@@ -35,7 +40,7 @@ const labelStyle: React.CSSProperties = {
   marginBottom: 5, marginTop: 14,
 };
 
-export default function SubmitSheet({ user, isMobile, getMapCenter, editPlace, onClose, onSubmitted }: Props) {
+export default function SubmitSheet({ user, isMobile, getMapCenter, editPlace, hidden, pickedPin, onPickOnMap, onClose, onSubmitted }: Props) {
   const isEdit = !!editPlace;
   const [title, setTitle] = useState(editPlace?.title ?? "");
   const [description, setDescription] = useState(editPlace?.description ?? "");
@@ -60,6 +65,16 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, editPlace, o
   const [uploading, setUploading] = useState(false);
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // A pin tapped on the map (pin-drop mode) becomes the chosen location.
+  // State-adjust-during-render pattern (not an effect) per react-hooks lint.
+  const [appliedPin, setAppliedPin] = useState<typeof pickedPin>(null);
+  if (pickedPin && pickedPin !== appliedPin) {
+    setAppliedPin(pickedPin);
+    setLocation({ label: `Dropped pin (${pickedPin.lat.toFixed(4)}, ${pickedPin.lng.toFixed(4)})`, lat: pickedPin.lat, lng: pickedPin.lng });
+    setLocResults([]);
+    setLocQuery("");
+  }
 
   async function handleFiles(files: FileList | null) {
     if (!files?.length) return;
@@ -158,7 +173,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, editPlace, o
         lat: location.lat,
         lng: location.lng,
         address: unchangedPin ? editPlace!.address
-          : location.label.startsWith("Pinned on map") ? null
+          : location.label.startsWith("Pinned on map") || location.label.startsWith("Dropped pin") ? null
           : location.label.split(",").slice(0, 2).join(","),
         area: area.trim() || null,
         image_url: imageUrls[0] ?? null,
@@ -188,7 +203,7 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, editPlace, o
         : { top: 74, right: 12, width: 380, maxHeight: "calc(100dvh - 90px)" }),
       background: DS.card, borderRadius: 10, boxShadow: FLOAT_SHADOW,
       border: `1px solid ${DS.border}`, zIndex: 47,
-      display: "flex", flexDirection: "column", overflow: "hidden",
+      display: hidden ? "none" : "flex", flexDirection: "column", overflow: "hidden",
     }}>
       <div style={{
         padding: "14px 16px", borderBottom: `1px solid ${DS.border}`,
@@ -256,6 +271,15 @@ export default function SubmitSheet({ user, isMobile, getMapCenter, editPlace, o
               }}>
                 {locating ? "Locating…" : "📍 Use my current location"}
               </button>
+              {onPickOnMap && (
+                <button onClick={onPickOnMap} style={{
+                  padding: "8px 12px", borderRadius: 5, cursor: "pointer",
+                  border: `1.5px solid ${DS.borderMd}`, background: "#fff", fontSize: 12.5,
+                  fontWeight: 700, color: DS.textSub, fontFamily: "inherit",
+                }}>
+                  📌 Drop a pin on the map
+                </button>
+              )}
               <button onClick={useMapCenter} style={{
                 padding: "8px 12px", borderRadius: 5, cursor: "pointer",
                 border: `1.5px dashed ${DS.borderMd}`, background: "#fff", fontSize: 12.5,

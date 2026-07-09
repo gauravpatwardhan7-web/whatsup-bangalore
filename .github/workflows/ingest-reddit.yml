@@ -1,6 +1,7 @@
-name: Reddit ingestion
+name: Social ingestion
 
-# Phase 2: pull r/bangalore hot posts → extract places → mentions table → trending.
+# Phase 2: pull hot posts from Bengaluru subreddits (+ YouTube once the
+# YOUTUBE_API_KEY secret is set) → extract places → mentions table → trending.
 # Daily at 03:15 UTC (~08:45 IST). Also runnable on demand from the Actions tab.
 on:
   schedule:
@@ -22,10 +23,19 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Run ingestion
+      - name: Run Reddit ingestion
         run: npm run ingest:reddit ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '-- --dry-run' || '' }}
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Posts come from Arctic Shift (keyless, not IP-blocked) — no Reddit creds needed.
+      - name: Run YouTube ingestion
+        # No-ops politely until the YOUTUBE_API_KEY secret exists.
+        if: always()
+        run: npm run ingest:youtube ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '-- --dry-run' || '' }}
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}

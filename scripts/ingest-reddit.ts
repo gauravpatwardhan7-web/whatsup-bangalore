@@ -25,11 +25,20 @@
 import { fileURLToPath } from "node:url";
 import { GoogleGenAI, Type } from "@google/genai";
 import { createClient } from "@supabase/supabase-js";
+import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { CATEGORIES, type Category } from "../lib/ds";
 import { searchBangalore } from "../lib/geocode";
 import { isInBengaluru, findDuplicate } from "../lib/guardrails";
 
-const SUBREDDIT = "bangalore";
+// Broadened beyond r/bangalore to the city's food/social subs. Override with a
+// comma-separated SUBREDDITS env var without touching code.
+const SUBREDDITS = (process.env.SUBREDDITS?.split(",").map((s) => s.trim()).filter(Boolean)) ?? [
+  "bangalore",
+  "Bengaluru",
+  "BangaloreFoodFreaks",
+  "bangalorefood",
+  "blr_drinks",
+];
 const ARCTIC_BASE = "https://arctic-shift.photon-reddit.com";
 // Arctic Shift backfills mature vote counts, but a just-posted item still shows
 // score ~1. r/bangalore also posts >100/day, so a plain "newest first" fetch only
@@ -45,26 +54,14 @@ const MATCH_RADIUS_M = 200; // an extracted place within this of an existing one
 const USER_AGENT = "whatsup-bangalore-ingest/1.0 (https://github.com/gauravpatwardhan7-web/whatsup-bangalore)";
 const CATEGORY_KEYS = Object.keys(CATEGORIES) as Category[];
 
-// Keyword photo per category (loremflickr, same service the curated seeds use)
-// so auto-discovered places aren't left with just the emoji placeholder. An
-// admin can swap in the real venue photo via the in-app edit sheet.
-const PHOTO_KEYWORDS: Record<Category, string> = {
-  food: "restaurant,food",
-  drinks: "bar,beer",
-  outdoors: "park,nature",
-  art_culture: "art,gallery",
-  shopping: "market,shopping",
-  nightlife: "nightlife,bar",
-  experience: "travel,experience",
-  event: "festival,concert",
-};
-
-// Stable per-place image: hash the name into a loremflickr ?lock so the same
-// place always resolves to the same photo (not a new random one each load).
-export function photoUrlFor(category: Category, seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return `https://loremflickr.com/600/400/${PHOTO_KEYWORDS[category]}?lock=${h % 100000}`;
+// Stable per-place placeholder image so auto-discovered places aren't left with
+// just the emoji placeholder. Picsum's /seed/ URLs are deterministic forever
+// (loremflickr's ?lock re-indexes its pool, so images drifted day to day).
+// Real venue photos come from the Google Places script (scripts/refresh-place-photos.ts)
+// or an admin swap via the in-app edit sheet.
+export function photoUrlFor(_category: Category, seed: string): string {
+  const slug = seed.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "place";
+  return `https://picsum.photos/seed/${slug}/600/400`;
 }
 
 // ── types ────────────────────────────────────────────────────────────────────
@@ -140,11 +137,11 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // now-MIN_AGE] window (newest matured posts first) and sort by our own engagement
 // score, taking the top HOT_LIMIT. Keyless and not IP-blocked from CI, unlike
 // Reddit's own API.
-async function fetchHotPosts(): Promise<RedditPost[]> {
+async function fetchSubredditPosts(subreddit: string): Promise<RedditPost[]> {
   const now = Math.floor(Date.now() / 1000);
   const after = now - LOOKBACK_DAYS * 86400;
   const before = now - MIN_AGE_DAYS * 86400;
-  const url = `${ARCTIC_BASE}/api/posts/search?subreddit=${SUBREDDIT}&after=${after}&before=${before}&sort=desc&limit=${FETCH_LIMIT}`;
+  const url = `${ARCTIC_BASE}/api/posts/search?subreddit=${subreddit}&after=${after}&before=${before}&sort=desc&limit=${FETCH_LIMIT}`;
 
   // Arctic Shift is a free hobby-run service that occasionally returns a transient
   // 422/5xx under node churn; retry a few times with backoff before giving up.
@@ -159,15 +156,31 @@ async function fetchHotPosts(): Promise<RedditPost[]> {
       console.warn(`  Arctic Shift fetch ${res.status} ${res.statusText} (attempt ${attempt})`);
     }
     if (attempt === 3) {
-      throw new Error(`Arctic Shift fetch failed after 3 attempts: ${res.status} ${res.statusText}`);
+      // One flaky sub shouldn't sink the others — skip it.
+      console.warn(`  r/${subreddit}: giving up after 3 attempts`);
+      return [];
     }
     await sleep(2000 * attempt);
   }
-  const posts = parseRedditPosts(json);
-  posts.sort(
+  return parseRedditPosts(json);
+}
+
+// Pull every configured subreddit, merge, dedupe, and keep the overall top
+// HOT_LIMIT by engagement (the LLM budget is shared across subs).
+async function fetchHotPosts(): Promise<RedditPost[]> {
+  const all: RedditPost[] = [];
+  for (const sub of SUBREDDITS) {
+    const posts = await fetchSubredditPosts(sub);
+    console.log(`  r/${sub}: ${posts.length} post(s)`);
+    all.push(...posts);
+    await sleep(1000); // be polite to Arctic Shift
+  }
+  const seen = new Set<string>();
+  const deduped = all.filter((p) => !seen.has(p.permalink) && (seen.add(p.permalink), true));
+  deduped.sort(
     (a, b) => normalizeEngagement(b.score, b.numComments) - normalizeEngagement(a.score, a.numComments),
   );
-  return posts.slice(0, HOT_LIMIT);
+  return deduped.slice(0, HOT_LIMIT);
 }
 
 const EXTRACTION_SCHEMA = {
@@ -314,9 +327,9 @@ async function main() {
   }
 
   const posts = await fetchHotPosts();
-  console.log(`Fetched ${posts.length} post(s) from r/${SUBREDDIT} (via Arctic Shift, ${MIN_AGE_DAYS}-${LOOKBACK_DAYS}d old).`);
+  console.log(`Fetched ${posts.length} post(s) from ${SUBREDDITS.map((s) => `r/${s}`).join(", ")} (via Arctic Shift, ${MIN_AGE_DAYS}-${LOOKBACK_DAYS}d old).`);
 
-  const supabase = canWrite ? createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false } }) : null;
+  const supabase = canWrite ? createClient(supabaseUrl!, serviceKey!, { auth: { persistSession: false }, realtime: { transport: ws } }) : null;
 
   // Skip posts we've already extracted from (dedupe work, not just rows).
   let seenUrls = new Set<string>();

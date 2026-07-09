@@ -45,6 +45,10 @@ export default function MapApp() {
   const [sort, setSort] = useState<SortMode>("trending");
   const [activeCats, setActiveCats] = useState<Set<Category>>(new Set());
   const [weekendOnly, setWeekendOnly] = useState(false);
+  const [query, setQuery] = useState("");
+  // Pin-drop mode: the submit sheet hides while the user taps the map to place the pin.
+  const [pinPick, setPinPick] = useState(false);
+  const [pickedPin, setPickedPin] = useState<{ lat: number; lng: number } | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const mapCenterRef = useRef({ lat: BLR_CENTER[1], lng: BLR_CENTER[0] });
 
@@ -95,12 +99,20 @@ export default function MapApp() {
     let rows = places;
     if (activeCats.size > 0) rows = rows.filter((p) => activeCats.has(p.category));
     if (weekendOnly) rows = rows.filter((p) => isThisWeekend(p.event_start));
+    const q = query.trim().toLowerCase();
+    if (q) {
+      rows = rows.filter((p) =>
+        p.title.toLowerCase().includes(q) ||
+        (p.area ?? "").toLowerCase().includes(q) ||
+        (p.description ?? "").toLowerCase().includes(q)
+      );
+    }
     const sorted = [...rows];
     if (sort === "trending") sorted.sort((a, b) => buzzScore(b.vote_count, b.comment_count) - buzzScore(a.vote_count, a.comment_count));
     if (sort === "newest") sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
     if (sort === "loved") sorted.sort((a, b) => b.vote_count - a.vote_count);
     return sorted;
-  }, [places, activeCats, weekendOnly, sort]);
+  }, [places, activeCats, weekendOnly, query, sort]);
 
   // "Trending" and "Most loved" are rankings → show a numbered Top 10.
   // "Newest" is a feed → show it all, unranked.
@@ -160,6 +172,12 @@ export default function MapApp() {
         selectedId={selectedId}
         onSelect={(p) => setSelectedId(p.id)}
         onCenterChange={(c) => { mapCenterRef.current = c; }}
+        picking={pinPick}
+        onMapClick={(pt) => {
+          if (!pinPick) return;
+          setPickedPin(pt);
+          setPinPick(false);
+        }}
       />
 
       {/* ── floating header ── */}
@@ -177,7 +195,7 @@ export default function MapApp() {
             fontFamily: "var(--font-display)", fontSize: isMobile ? 14 : 16.5, fontWeight: 700,
             color: DS.text, letterSpacing: "-0.01em", whiteSpace: "nowrap",
           }}>
-            Whatsup <span style={{ color: DS.accent }}>Bangalore</span>
+            What&rsquo;s Trending <span style={{ color: DS.accent }}>Bangalore</span>
           </span>
         </div>
         <div style={{ flex: 1 }} />
@@ -296,6 +314,27 @@ export default function MapApp() {
             {isMobile && <span style={{ color: DS.textMut, fontSize: 13 }}>{listOpen ? "▾" : "▴"}</span>}
           </button>
 
+          <div style={{ padding: "0 16px 8px", position: "relative" }}>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="🔍 Search spots, areas…"
+              aria-label="Search spots"
+              style={{
+                width: "100%", boxSizing: "border-box", padding: "8px 30px 8px 11px",
+                borderRadius: 5, border: `1.5px solid ${DS.border}`, fontSize: 13,
+                fontFamily: "inherit", color: DS.text, outline: "none", background: DS.bg,
+              }}
+            />
+            {query && (
+              <button onClick={() => setQuery("")} aria-label="Clear search" style={{
+                position: "absolute", right: 22, top: "50%", transform: "translateY(-58%)",
+                border: "none", background: "none", cursor: "pointer", color: DS.textMut,
+                fontSize: 13, padding: 2,
+              }}>✕</button>
+            )}
+          </div>
+
           <div style={{ display: "flex", gap: 4, padding: "0 16px 10px" }}>
             {SORTS.map((s) => (
               <button key={s.id} onClick={() => setSort(s.id)} style={{
@@ -347,6 +386,23 @@ export default function MapApp() {
         />
       )}
 
+      {/* ── pin-drop banner (submit sheet hides while the user taps the map) ── */}
+      {pinPick && (
+        <div style={{
+          position: "absolute", bottom: isMobile ? 24 : 32, left: "50%", transform: "translateX(-50%)",
+          zIndex: 60, background: DS.text, color: "#fff", borderRadius: 6, padding: "11px 18px",
+          fontSize: 13.5, fontWeight: 600, boxShadow: FLOAT_SHADOW, display: "flex",
+          alignItems: "center", gap: 12, whiteSpace: "nowrap",
+        }}>
+          📍 Tap the map where the spot is
+          <button onClick={() => setPinPick(false)} style={{
+            border: "none", borderRadius: 5, padding: "5px 11px", cursor: "pointer",
+            background: "rgba(255,255,255,0.18)", color: "#fff", fontSize: 12, fontWeight: 700,
+            fontFamily: "inherit",
+          }}>Cancel</button>
+        </div>
+      )}
+
       {/* ── submit sheet ── */}
       {showSubmit && user && (
         <SubmitSheet
@@ -354,11 +410,15 @@ export default function MapApp() {
           isMobile={isMobile}
           editPlace={editPlace}
           getMapCenter={() => mapCenterRef.current}
-          onClose={() => { setShowSubmit(false); setEditPlace(null); }}
+          hidden={pinPick}
+          pickedPin={pickedPin}
+          onPickOnMap={() => setPinPick(true)}
+          onClose={() => { setShowSubmit(false); setEditPlace(null); setPinPick(false); setPickedPin(null); }}
           onSubmitted={async (status) => {
             const wasEdit = !!editPlace;
             setShowSubmit(false);
             setEditPlace(null);
+            setPickedPin(null);
             setToast(wasEdit
               ? "Changes saved. ✅"
               : status === "approved" ? "It's on the map! 🎉" : "Submitted — it'll go live after review. 🙌");

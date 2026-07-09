@@ -69,3 +69,34 @@ repository secrets first.
 
 Run `supabase/migrations/0005_mentions_dedupe.sql` in the SQL editor once (adds
 the dedupe index the upsert relies on).
+
+## YouTube ingestion (`ingest-youtube.ts`)
+
+Same pipeline shape as Reddit, sourced from the YouTube Data API v3: search a
+handful of Bengaluru queries (override with a comma-separated `YOUTUBE_QUERIES`
+env var) for videos from the last 7 days, rank by views/likes/comments, then
+Gemini-extract → geocode → match-or-create pending place (`source='youtube'`)
+→ upsert mention (`platform='youtube'`). Runs as a second step in
+`.github/workflows/ingest-reddit.yml` and no-ops until the `YOUTUBE_API_KEY`
+secret exists (free tier: 10,000 units/day; a run costs ~100/query).
+Requires migration `0008` (adds `youtube` to the platform/source checks).
+
+## Weekly newsletter (`send-newsletter.ts`)
+
+Every Thursday (`.github/workflows/newsletter.yml`, 03:30 UTC ≈ 09:00 IST):
+builds a top-10 trending digest (past events excluded) and emails every
+Supabase auth user. Delivery goes through a single `sendEmail()` function,
+currently backed by Resend (free tier: 100/day) — swap the provider by editing
+that one function. Needs the `RESEND_API_KEY` secret; `NEWSLETTER_FROM` is
+optional until a sending domain is verified in Resend. Dry run:
+`npm run newsletter -- --dry-run`.
+
+## Google Places photos (`refresh-place-photos.ts`)
+
+Replaces placeholder images (picsum/loremflickr) with the venue's real photo
+from Google Places: Text Search → download top photo → upload to the Supabase
+`place-images` bucket → point `image_url` at it (the image becomes ours; no
+Google URL or key in the client). Key is swappable via `lib/places-api.ts`:
+`GOOGLE_PLACES_API_KEY` (real) wins over `PLACES_API_DEMO_KEY` (placeholder in
+`.env.local`; requests with it fail gracefully per place). Run manually when a
+real key lands: `npm run photos:refresh` (or `-- --dry-run`; `-- --limit 5` caps the batch).
