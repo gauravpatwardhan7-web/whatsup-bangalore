@@ -3,7 +3,7 @@
 The one file to read when starting a session and update before ending one. If this
 disagrees with memory or chat, **this file wins**. Keep it short and current.
 
-**Last updated:** 2026-07-09 · **Phase:** Live on Netlify (prod); big feature batch (search, pin-drop, newsletter, YouTube, rename, stable images, Places API scaffolding) built & verified locally — **uncommitted**, pending one batched deploy + migration `0008` + new GitHub secrets
+**Last updated:** 2026-07-09 · **Phase:** Live on Netlify (prod); feature batch shipped (8a6a869, deployed); migration 0008 run; YT+Resend secrets added; Places key live — 5 real photos fetched, 17 places pending `npm run photos:refresh`
 
 ---
 
@@ -66,11 +66,11 @@ disagrees with memory or chat, **this file wins**. Keep it short and current.
 - **Migrations:** `supabase/migrations/` (run in order in the SQL Editor)
 - **Repo:** https://github.com/gauravpatwardhan7-web/whatsup-bangalore
 
-## Pending activation (this batch)
-- Run `supabase/migrations/0008_youtube_and_stable_images.sql` in the SQL Editor (adds `youtube` to platform/source checks; the stable-image data fix was **already applied live** via REST on 2026-07-09).
-- GitHub secrets to add when ready: `RESEND_API_KEY` (+ optional `NEWSLETTER_FROM` after domain verification) for the Thursday newsletter; `YOUTUBE_API_KEY` for YouTube ingestion (both workflows no-op/dry-run politely without them).
-- Real Google Places key → set `GOOGLE_PLACES_API_KEY` in `.env.local`, run `npm run photos:refresh` for real venue photos (demo key in env is a non-working placeholder; precedence handled in `lib/places-api.ts`).
-- Commit + push this batch as **one deploy** (Netlify credit budget).
+## Pending activation
+- Run `npm run photos:refresh` for the remaining 17 placeholder images (Places free tier covers it; key in .env.local).
+- Rename GitHub secret if needed: script expects `YOUTUBE_API_KEY` (user created `YOUTUBE_DATA_API_KEY` locally — verify the GitHub secret name matches).
+- `NEWSLETTER_FROM` secret once a sending domain is verified in Resend (until then Resend only delivers to the account owner's email).
+- Consider Places-as-geocoder fallback for ingestion (13/17 YT candidates failed Nominatim).
 
 ## Session log
 - 2026-07-09 — Feature batch: renamed app to **What's Trending Bangalore**; search bar in the list panel (filters list + map pins); true pin-drop on the map from the submit sheet (tap anywhere, crosshair cursor); past events auto-hidden from the feed; weekly Thursday newsletter (`scripts/send-newsletter.ts` + workflow, Resend-backed, provider-swappable); Reddit ingestion broadened to 5 BLR subreddits (env-overridable); YouTube ingestion added (`scripts/ingest-youtube.ts`, needs `YOUTUBE_API_KEY`); fixed daily-changing seed images (loremflickr re-indexes → switched to deterministic picsum seeds; live DB rows patched via REST); Google Places API scaffolding (`lib/places-api.ts` + `npm run photos:refresh`, swappable demo→real key). Lint/build green; UI verified in preview. See "Pending activation".
