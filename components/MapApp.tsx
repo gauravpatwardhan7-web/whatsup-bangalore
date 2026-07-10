@@ -25,6 +25,9 @@ function useIsMobile() {
 }
 
 const TOP_N = 10;
+// Set NEXT_PUBLIC_BMC_URL on Netlify to show the "Buy me a coffee" button
+// (e.g. https://buymeacoffee.com/yourhandle). No redeploy needed to change it.
+const BMC_URL = process.env.NEXT_PUBLIC_BMC_URL;
 
 const SORTS: { id: SortMode; label: string }[] = [
   { id: "trending", label: "Trending" },
@@ -63,13 +66,27 @@ export default function MapApp() {
   }, []);
 
   useEffect(() => {
-    fetchPlaces().then(setPlaces).catch(() => setToast("Couldn't load places — check your Supabase setup."))
+    // Read the ?place=<id> deep link now, before the URL-sync effect below can
+    // strip it on this same mount (effects run top-to-bottom).
+    const pid = new URLSearchParams(window.location.search).get("place");
+    fetchPlaces().then((rows) => {
+      setPlaces(rows);
+      if (pid && rows.some((p) => p.id === pid)) setSelectedId(pid);
+    }).catch(() => setToast("Couldn't load places — check your Supabase setup."))
       .finally(() => setLoading(false));
     getSessionUser().then((u) => {
       setUser(u);
       if (u?.isAdmin) countPendingPlaces().then(setPendingCount).catch(() => {});
     }).catch(() => {});
   }, []);
+
+  // Keep the URL shareable: reflect the open spot in ?place=<id>.
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (selectedId) url.searchParams.set("place", selectedId);
+    else url.searchParams.delete("place");
+    window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+  }, [selectedId]);
 
   // Real-time: when anyone votes or comments, refresh that one place's live
   // counts so its badge/glow/rank updates for everyone without a refresh.
@@ -173,6 +190,8 @@ export default function MapApp() {
         onSelect={(p) => setSelectedId(p.id)}
         onCenterChange={(c) => { mapCenterRef.current = c; }}
         picking={pinPick}
+        pickedPin={showSubmit ? pickedPin : null}
+        onPickedPinMove={(pt) => setPickedPin(pt)}
         onMapClick={(pt) => {
           if (!pinPick) return;
           setPickedPin(pt);
@@ -199,6 +218,23 @@ export default function MapApp() {
           </span>
         </div>
         <div style={{ flex: 1 }} />
+        {BMC_URL && (
+          <a
+            href={BMC_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            title="Support this project — buy me a coffee"
+            style={{
+              display: "flex", alignItems: "center", gap: 6,
+              padding: isMobile ? "8px 11px" : "9px 14px", borderRadius: 5,
+              border: `1.5px solid ${DS.borderMd}`, background: "rgba(255,255,255,0.95)",
+              color: DS.text, fontSize: 13, fontWeight: 700, fontFamily: "inherit",
+              boxShadow: FLOAT_SHADOW, whiteSpace: "nowrap", textDecoration: "none",
+            }}
+          >
+            ☕{isMobile ? "" : " Coffee"}
+          </a>
+        )}
         {user?.isAdmin && (
           <Link
             href="/admin"
@@ -293,26 +329,51 @@ export default function MapApp() {
         <div style={{
           position: "absolute", zIndex: 30,
           ...(isMobile
-            ? { left: 8, right: 8, bottom: 8, maxHeight: listOpen ? "46dvh" : 52 }
+            ? { left: 8, right: 8, bottom: 8, maxHeight: listOpen ? "64dvh" : 56 }
             : { top: 108, left: 12, width: 360, bottom: 16 }),
           background: "rgba(255,255,255,0.97)", backdropFilter: "blur(8px)",
           borderRadius: 10, boxShadow: FLOAT_SHADOW, border: `1px solid ${DS.border}`,
           display: "flex", flexDirection: "column", overflow: "hidden",
           transition: "max-height 0.25s ease",
         }}>
-          <button
-            onClick={() => isMobile && setListOpen((o) => !o)}
-            style={{
-              display: "flex", alignItems: "center", gap: 8, padding: "13px 16px 10px",
-              background: "none", border: "none", cursor: isMobile ? "pointer" : "default",
-              fontFamily: "inherit", textAlign: "left",
-            }}
-          >
-            <span style={{ fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, color: DS.text, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "center", padding: "12px 10px 10px 16px" }}>
+            <button
+              onClick={() => isMobile && setListOpen((o) => !o)}
+              style={{
+                flex: 1, minWidth: 0, display: "block", padding: 0,
+                background: "none", border: "none", cursor: isMobile ? "pointer" : "default",
+                fontFamily: "var(--font-display)", fontSize: 15, fontWeight: 700, color: DS.text,
+                textAlign: "left", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
+              }}
+            >
               {listHeading}
-            </span>
-            {isMobile && <span style={{ color: DS.textMut, fontSize: 13 }}>{listOpen ? "▾" : "▴"}</span>}
-          </button>
+            </button>
+            <Link
+              href="/newsletter"
+              title="This week's picks"
+              style={{
+                flexShrink: 0, marginLeft: 12, padding: "5px 10px", borderRadius: 999,
+                fontSize: 12, fontWeight: 700, color: DS.accent, whiteSpace: "nowrap",
+                border: `1.5px solid ${DS.border}`, background: DS.card,
+              }}
+            >
+              📰 Weekly
+            </Link>
+            {isMobile && (
+              <button
+                onClick={() => setListOpen((o) => !o)}
+                aria-label={listOpen ? "Collapse list" : "Expand list"}
+                style={{
+                  flexShrink: 0, marginLeft: 6, width: 34, height: 34, borderRadius: 8,
+                  border: `1.5px solid ${DS.border}`, background: DS.card, cursor: "pointer",
+                  color: DS.textSub, fontSize: 15, lineHeight: 1, display: "flex",
+                  alignItems: "center", justifyContent: "center", padding: 0,
+                }}
+              >
+                {listOpen ? "▾" : "▴"}
+              </button>
+            )}
+          </div>
 
           <div style={{ padding: "0 16px 8px", position: "relative" }}>
             <input

@@ -319,3 +319,14 @@ export async function deletePlace(placeId: string): Promise<void> {
   const { error } = await supabaseBrowser().from("places").delete().eq("id", placeId);
   if (error) throw error;
 }
+
+// Collapse a duplicate `source` place into `target`, moving its votes/comments/
+// mentions over (admin only; see migration 0011_merge_places.sql).
+export async function mergePlaces(sourceId: string, targetId: string): Promise<void> {
+  if (MOCK_MODE) {
+    mockPlaces = mockPlaces.filter((p) => p.id !== sourceId);
+    return;
+  }
+  const { error } = await supabaseBrowser().rpc("merge_places", { p_source: sourceId, p_target: targetId });
+  if (error) throw error;
+}

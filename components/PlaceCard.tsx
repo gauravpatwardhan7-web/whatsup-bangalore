@@ -29,12 +29,12 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
         display: "block", width: "100%", textAlign: "left",
         background: selected ? cat.tint : DS.card,
         border: `1.5px solid ${selected ? cat.color : DS.border}`,
-        borderRadius: 8, padding: "12px 14px", marginBottom: 10,
+        borderRadius: 8, padding: "10px 12px", marginBottom: 7,
         boxShadow: CARD_SHADOW, cursor: "pointer",
         fontFamily: "inherit",
       }}
     >
-      <div style={{ display: "flex", gap: 12 }}>
+      <div style={{ display: "flex", gap: 10 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             {rank !== undefined && (
@@ -47,10 +47,11 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
                 {rank}
               </span>
             )}
-            <span style={{ fontSize: 18 }}>{cat.emoji}</span>
+            <span style={{ fontSize: 18, flexShrink: 0 }}>{cat.emoji}</span>
             <span style={{
               fontFamily: "var(--font-display)", fontSize: 15.5, fontWeight: 700,
-              color: DS.text, letterSpacing: "-0.01em", flex: 1,
+              color: DS.text, letterSpacing: "-0.01em", flex: 1, minWidth: 0,
+              whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
             }}>
               {place.title}
             </span>
@@ -73,7 +74,7 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
             )}
           </div>
           <div style={{
-            display: "flex", gap: 14, marginTop: 8, marginLeft: 26,
+            display: "flex", gap: 14, marginTop: 5, marginLeft: 26,
             fontSize: 12.5, color: DS.textMut, fontWeight: 600,
           }}>
             <span style={{ color: place.my_vote === 1 ? DS.accent : place.my_vote === -1 ? "#dc2626" : DS.textMut }}>
@@ -88,14 +89,14 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
         {place.image_url ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={place.image_url} alt="" loading="lazy" style={{
-            width: 72, height: 72, borderRadius: 6, objectFit: "cover",
+            width: 58, height: 58, borderRadius: 6, objectFit: "cover",
             flexShrink: 0, alignSelf: "center", border: `1px solid ${DS.border}`,
           }} />
         ) : (
           <div style={{
-            width: 72, height: 72, borderRadius: 6, flexShrink: 0, alignSelf: "center",
+            width: 58, height: 58, borderRadius: 6, flexShrink: 0, alignSelf: "center",
             background: cat.tint, border: `1px solid ${DS.border}`,
-            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 28,
+            display: "flex", alignItems: "center", justifyContent: "center", fontSize: 24,
           }}>
             {cat.emoji}
           </div>

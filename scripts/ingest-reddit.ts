@@ -29,7 +29,7 @@ import { GoogleGenAI } from "@google/genai";
 import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { CATEGORIES, type Category } from "../lib/ds";
-import { findDuplicate } from "../lib/guardrails";
+import { findNearbyMatch } from "../lib/guardrails";
 import { chunk, extractCandidates, type Candidate } from "./llm-extract";
 import { geocodeInBlr, enrichNewPlace } from "./resolve-place";
 import { storePlacePhotos } from "./place-photos";
@@ -56,7 +56,6 @@ const CHUNK_SIZE = 10; // posts per LLM call — smaller chunks parse more relia
 // "-latest" alias, not a pinned snapshot — Google sunsets dated model IDs
 // (gemini-2.5-flash 404'd in prod on 2026-07-10) without touching aliases.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
-const MATCH_RADIUS_M = 200; // an extracted place within this of an existing one, same-ish name → merge
 // A brand-new place must clear this source-engagement bar (0–6 scale) to be
 // created — one weak mention shouldn't mint a pin. Linking a mention to an
 // existing place has no floor (every signal still feeds trending_score).
@@ -199,19 +198,6 @@ function buildPrompt(posts: RedditPost[], baseIndex: number): string {
   return `Posts:\n\n${numbered}`;
 }
 
-// Existing place matching `name` within MATCH_RADIUS_M of (lat,lng), or null.
-function matchExisting(
-  name: string,
-  lat: number,
-  lng: number,
-  places: { id: string; title: string; lat: number; lng: number }[],
-): { id: string; title: string } | null {
-  const dLat = MATCH_RADIUS_M / 111_320;
-  const dLng = MATCH_RADIUS_M / (111_320 * Math.cos((lat * Math.PI) / 180));
-  const nearby = places.filter((p) => Math.abs(p.lat - lat) <= dLat && Math.abs(p.lng - lng) <= dLng);
-  return findDuplicate(name, nearby);
-}
-
 // ── main ───────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -285,7 +271,7 @@ async function main() {
     const category = normalizeCategory(cand.category, cand.is_event);
     const engagement = normalizeEngagement(post.score, post.numComments);
     const mentionedAt = new Date(post.createdUtc * 1000).toISOString();
-    const match = matchExisting(cand.name, geo.lat, geo.lng, existingPlaces);
+    const match = findNearbyMatch(cand.name, geo.lat, geo.lng, existingPlaces);
 
     // Floor applies only to creating a new place; linking always counts.
     if (!match && engagement < MIN_CREATE_ENGAGEMENT) {

@@ -42,6 +42,24 @@ export default function PlaceSheet({
   const [postError, setPostError] = useState<string | null>(null);
   const [signalState, setSignalState] = useState<{ placeId: string; rows: PlaceSignal[] } | null>(null);
   const signals = signalState?.placeId === place.id ? signalState.rows : [];
+  const [shareMsg, setShareMsg] = useState<string | null>(null);
+
+  async function handleShare() {
+    const url = `${window.location.origin}/?place=${place.id}`;
+    const shareData = { title: `${place.title} — What's Trending Bangalore`, url };
+    if (navigator.share) {
+      try { await navigator.share(shareData); } catch { /* user cancelled */ }
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      setShareMsg("Link copied!");
+      setTimeout(() => setShareMsg(null), 2000);
+    } catch {
+      setShareMsg("Couldn't copy");
+      setTimeout(() => setShareMsg(null), 2000);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -141,7 +159,15 @@ export default function PlaceSheet({
               </div>
             )}
           </div>
-          <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
+          <div style={{ display: "flex", gap: 6, flexShrink: 0, alignItems: "center" }}>
+            {shareMsg && (
+              <span style={{ fontSize: 11.5, fontWeight: 700, color: DS.accent }}>{shareMsg}</span>
+            )}
+            <button onClick={handleShare} aria-label="Share this spot" title="Share" style={{
+              border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 5,
+              height: 28, padding: "0 10px", cursor: "pointer", color: DS.textSub,
+              fontSize: 12.5, fontWeight: 700, fontFamily: "inherit",
+            }}>↗ Share</button>
             {canEdit && (
               <button onClick={() => onEdit(place)} aria-label="Edit this spot" title="Edit" style={{
                 border: "none", background: "rgba(0,0,0,0.06)", borderRadius: 5,

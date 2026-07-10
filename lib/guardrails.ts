@@ -57,3 +57,32 @@ export function titlesLookSame(a: string, b: string): boolean {
 export function findDuplicate<T extends { title: string }>(title: string, nearby: T[]): T | null {
   return nearby.find((p) => titlesLookSame(title, p.title)) ?? null;
 }
+
+// Same place, same name after normalization (ignores punctuation/case/spacing).
+export function titlesExactSame(a: string, b: string): boolean {
+  const na = normalizeTitle(a);
+  return na.length > 0 && na === normalizeTitle(b);
+}
+
+// Ingestion dedupe. Two radii, because geocoding the same venue on different
+// runs/sources can land the pins a few hundred metres apart:
+//  • an EXACT normalized-name match counts as a dup within the wider radius
+//    (catches geocode drift) — but stays tight enough not to merge distinct
+//    branches of a chain across town;
+//  • a fuzzy name match ("La Casa" vs "La Casa Brewery") only within the near
+//    radius, where a loose name match is safe.
+export function findNearbyMatch<T extends { title: string; lat: number; lng: number }>(
+  name: string, lat: number, lng: number, places: T[],
+  opts?: { fuzzyRadiusM?: number; exactRadiusM?: number },
+): T | null {
+  const fuzzyR = opts?.fuzzyRadiusM ?? 200;
+  const exactR = opts?.exactRadiusM ?? 600;
+  const within = (r: number) => {
+    const dLat = r / 111_320;
+    const dLng = r / (111_320 * Math.cos((lat * Math.PI) / 180));
+    return places.filter((p) => Math.abs(p.lat - lat) <= dLat && Math.abs(p.lng - lng) <= dLng);
+  };
+  return within(exactR).find((p) => titlesExactSame(name, p.title))
+    ?? findDuplicate(name, within(fuzzyR))
+    ?? null;
+}

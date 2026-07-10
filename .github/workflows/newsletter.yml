@@ -1,6 +1,6 @@
 name: Weekly newsletter
 
-# Every Thursday at 03:30 UTC (~09:00 IST): top-10 trending digest to all users.
+# Every Thursday at 03:30 UTC (~09:00 IST): curated weekend guide to all users.
 # Needs the RESEND_API_KEY secret (and optionally NEWSLETTER_FROM once a domain
 # is verified in Resend); without it the run is a harmless dry run.
 on:
@@ -30,3 +30,5 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           NEWSLETTER_FROM: ${{ secrets.NEWSLETTER_FROM }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}

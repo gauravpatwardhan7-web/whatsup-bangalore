@@ -26,7 +26,7 @@ import { GoogleGenAI } from "@google/genai";
 import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { CATEGORIES, type Category } from "../lib/ds";
-import { findDuplicate } from "../lib/guardrails";
+import { findNearbyMatch } from "../lib/guardrails";
 import { photoUrlFor } from "./ingest-reddit";
 import { chunk, extractCandidates, type Candidate } from "./llm-extract";
 import { geocodeInBlr, enrichNewPlace } from "./resolve-place";
@@ -45,7 +45,6 @@ const HOT_LIMIT = 40; // top-by-views videos to actually analyze
 const CHUNK_SIZE = 10;
 // "-latest" alias, not a pinned snapshot — see ingest-reddit.ts for why.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
-const MATCH_RADIUS_M = 200;
 // See ingest-reddit.ts — a new place must clear this source-engagement bar;
 // linking to an existing place has no floor. Env-tunable.
 const MIN_CREATE_ENGAGEMENT = Number(process.env.MIN_CREATE_ENGAGEMENT ?? 3.0);
@@ -161,16 +160,6 @@ function normalizeCategory(c: string, isEvent: boolean): Category {
   return (CATEGORY_KEYS as string[]).includes(c) ? (c as Category) : "experience";
 }
 
-function matchExisting(
-  name: string, lat: number, lng: number,
-  places: { id: string; title: string; lat: number; lng: number }[],
-): { id: string; title: string } | null {
-  const dLat = MATCH_RADIUS_M / 111_320;
-  const dLng = MATCH_RADIUS_M / (111_320 * Math.cos((lat * Math.PI) / 180));
-  const nearby = places.filter((p) => Math.abs(p.lat - lat) <= dLat && Math.abs(p.lng - lng) <= dLng);
-  return findDuplicate(name, nearby);
-}
-
 async function main() {
   const dryRunFlag = process.argv.includes("--dry-run");
   const ytKey = process.env.YOUTUBE_API_KEY;
@@ -237,7 +226,7 @@ async function main() {
 
     const category = normalizeCategory(cand.category, cand.is_event);
     const engagement = normalizeYtEngagement(video.views, video.likes, video.comments);
-    const match = matchExisting(cand.name, geo.lat, geo.lng, existingPlaces);
+    const match = findNearbyMatch(cand.name, geo.lat, geo.lng, existingPlaces);
 
     // Floor applies only to creating a new place; linking always counts.
     if (!match && engagement < MIN_CREATE_ENGAGEMENT) {

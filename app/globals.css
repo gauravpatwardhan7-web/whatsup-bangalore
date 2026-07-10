@@ -68,5 +68,55 @@ body {
   to   { transform: rotate(360deg); }
 }
 
+/* Cluster bubble — count of pins grouped at this zoom. Tap to zoom in.
+   Soft translucent navy with a gentle aura, so groups read as "more here"
+   without visually shouting over the individual pins. */
+.cluster-pin {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(30, 64, 175, 0.7);
+  color: rgba(255, 255, 255, 0.96);
+  font-family: var(--font-display), system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  box-shadow:
+    0 0 0 7px rgba(30, 64, 175, 0.12),
+    0 0 16px 3px rgba(30, 64, 175, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.16);
+  backdrop-filter: blur(1px);
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+.cluster-pin:hover {
+  transform: scale(1.06);
+  box-shadow:
+    0 0 0 9px rgba(30, 64, 175, 0.14),
+    0 0 20px 4px rgba(30, 64, 175, 0.28),
+    0 2px 8px rgba(0, 0, 0, 0.18);
+}
+
+/* Dropped-pin marker during the submit flow — draggable, clearly "new". */
+.picked-pin {
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: grab;
+  filter: drop-shadow(0 3px 5px rgba(0, 0, 0, 0.35));
+  animation: drop-bounce 0.4s ease-out;
+}
+.picked-pin:active { cursor: grabbing; }
+.picked-pin span { font-size: 30px; line-height: 1; }
+
+@keyframes drop-bounce {
+  0%   { transform: translateY(-18px); opacity: 0; }
+  60%  { transform: translateY(3px); opacity: 1; }
+  100% { transform: translateY(0); }
+}
+
 /* Hide maplibre attribution collapse button overlap on small screens */
 .maplibregl-ctrl-bottom-left { z-index: 5; }

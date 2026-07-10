@@ -7,8 +7,8 @@ export const DS = {
   text:     "#1c1917",   // near-black
   textSub:  "#78716c",   // stone-500
   textMut:  "#a8a29e",   // stone-400
-  accent:   "#4285f4",   // brand blue
-  accentLt: "#6fa1f7",   // lighter blue
+  accent:   "#1e40af",   // deep navy blue
+  accentLt: "#3b5bd9",   // lighter navy
 } as const;
 
 export const CARD_SHADOW = "0 2px 8px rgba(0,0,0,0.05), 0 0 0 1px rgba(0,0,0,0.03)";
