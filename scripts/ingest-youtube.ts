@@ -39,7 +39,8 @@ const LOOKBACK_DAYS = 7; // videos published in the last week
 const MAX_PER_QUERY = 25;
 const HOT_LIMIT = 40; // top-by-views videos to actually analyze
 const CHUNK_SIZE = 10;
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+// "-latest" alias, not a pinned snapshot — see ingest-reddit.ts for why.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 const MATCH_RADIUS_M = 200;
 const CATEGORY_KEYS = Object.keys(CATEGORIES) as Category[];
 

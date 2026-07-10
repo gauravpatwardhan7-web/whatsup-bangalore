@@ -49,7 +49,9 @@ const LOOKBACK_DAYS = 4; // don't consider posts older than this
 const FETCH_LIMIT = 100; // Arctic Shift max results per request
 const HOT_LIMIT = 40; // top-by-engagement posts to actually analyze
 const CHUNK_SIZE = 10; // posts per LLM call — smaller chunks parse more reliably than 20
-const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+// "-latest" alias, not a pinned snapshot — Google sunsets dated model IDs
+// (gemini-2.5-flash 404'd in prod on 2026-07-10) without touching aliases.
+const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 const MATCH_RADIUS_M = 200; // an extracted place within this of an existing one, same-ish name → merge
 const USER_AGENT = "whatsup-bangalore-ingest/1.0 (https://github.com/gauravpatwardhan7-web/whatsup-bangalore)";
 const CATEGORY_KEYS = Object.keys(CATEGORIES) as Category[];
