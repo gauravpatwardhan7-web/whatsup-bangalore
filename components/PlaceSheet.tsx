@@ -5,6 +5,7 @@ import { CATEGORIES, DS, FLOAT_SHADOW, placeTier } from "@/lib/ds";
 import { addComment, fetchComments, fetchPlaceSignals, setVote, type PlaceSignal } from "@/lib/data";
 import { formatEventWindow, priceLabel, timeAgo } from "@/lib/format";
 import type { Place, PlaceComment, SessionUser } from "@/lib/types";
+import PhotoCarousel from "./PhotoCarousel";
 
 interface Props {
   place: Place;
@@ -178,33 +179,11 @@ export default function PlaceSheet({
       </div>
 
       <div style={{ overflowY: "auto", padding: "14px 16px" }}>
-        {(() => {
-          // Older rows only have image_url; newer ones carry the full set.
-          const photos = place.image_urls?.length ? place.image_urls
-            : place.image_url ? [place.image_url] : [];
-          if (photos.length === 0) return null;
-          if (photos.length === 1) {
-            // eslint-disable-next-line @next/next/no-img-element
-            return <img src={photos[0]} alt={place.title} style={{
-              width: "100%", height: 180, borderRadius: 6, marginBottom: 12, objectFit: "cover",
-              border: `1px solid ${DS.border}`,
-            }} />;
-          }
-          return (
-            <div style={{
-              display: "flex", gap: 8, overflowX: "auto", marginBottom: 12,
-              scrollSnapType: "x mandatory", WebkitOverflowScrolling: "touch",
-            }}>
-              {photos.map((url, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={url} alt={`${place.title} — photo ${i + 1}`} style={{
-                  height: 180, minWidth: "78%", borderRadius: 6, objectFit: "cover",
-                  border: `1px solid ${DS.border}`, scrollSnapAlign: "start",
-                }} />
-              ))}
-            </div>
-          );
-        })()}
+        {/* Older rows only have image_url; newer ones carry the full set. */}
+        <PhotoCarousel
+          photos={place.image_urls?.length ? place.image_urls : place.image_url ? [place.image_url] : []}
+          alt={place.title}
+        />
         {!(place.image_urls?.length || place.image_url) && (
           <div style={{
             width: "100%", height: 110, borderRadius: 6, marginBottom: 12,

@@ -21,7 +21,8 @@
 import { fileURLToPath } from "node:url";
 import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
-import { findPlace, fetchPlacePhoto, placesApiKey } from "../lib/places-api";
+import { findPlace, placesApiKey } from "../lib/places-api";
+import { storePlacePhotos } from "./place-photos";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -31,6 +32,9 @@ function isPlaceholder(url: string | null): boolean {
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
+  // --force: re-process every place, even those already photographed/enriched
+  // (e.g. to re-pull the now-3 photos onto places that only got 1 before).
+  const force = process.argv.includes("--force");
   // --limit N: cap how many places get processed (e.g. a small cost-probe run).
   const limitArg = process.argv[process.argv.indexOf("--limit") + 1];
   const limit = process.argv.includes("--limit") ? Math.max(1, Number(limitArg) || 1) : Infinity;
@@ -53,7 +57,8 @@ async function main() {
   if (error) throw error;
 
   // Refresh anything still on a placeholder image OR not yet enriched (no rating).
-  let targets = (places ?? []).filter((p) => isPlaceholder(p.image_url) || p.rating == null);
+  // --force re-processes everything.
+  let targets = force ? (places ?? []) : (places ?? []).filter((p) => isPlaceholder(p.image_url) || p.rating == null);
   console.log(`${targets.length} place(s) needing photo/enrichment${dryRun ? " (dry run)" : ""}.`);
   if (targets.length > limit) {
     targets = targets.slice(0, limit);
@@ -77,28 +82,18 @@ async function main() {
         website: found.website,
       };
       if (dryRun) {
-        console.log(`  ~ "${place.title}" → ${found.displayName} · ${found.rating ?? "?"}★ · ${found.photoName ? "photo" : "no photo"}`);
+        console.log(`  ~ "${place.title}" → ${found.displayName} · ${found.rating ?? "?"}★ · ${found.photoNames.length} photo(s)`);
         continue;
       }
-      let photoUpdate: { image_url: string; image_urls: string[] } | null = null;
-      if (found.photoName) {
-        const { bytes, contentType } = await fetchPlacePhoto(found.photoName);
-        const ext = contentType.includes("png") ? "png" : "jpg";
-        const path = `places-api/${place.id}.${ext}`;
-        const { error: upErr } = await supabase.storage
-          .from("place-images")
-          .upload(path, bytes, { contentType, cacheControl: "31536000", upsert: true });
-        if (upErr) throw upErr;
-        const publicUrl = supabase.storage.from("place-images").getPublicUrl(path).data.publicUrl;
-        photoUpdate = { image_url: publicUrl, image_urls: [publicUrl] };
-      }
+      const photos = await storePlacePhotos(supabase, place.id, found.photoNames);
+      const photoUpdate = photos.length ? { image_url: photos[0], image_urls: photos } : {};
       const { error: dbErr } = await supabase
         .from("places")
-        .update({ ...enrichUpdate, ...(photoUpdate ?? {}) })
+        .update({ ...enrichUpdate, ...photoUpdate })
         .eq("id", place.id);
       if (dbErr) throw dbErr;
       updated++;
-      console.log(`  ✓ "${place.title}" — ${photoUpdate ? "photo + " : ""}enrichment set (${found.rating ?? "?"}★)`);
+      console.log(`  ✓ "${place.title}" — ${photos.length} photo(s) + enrichment (${found.rating ?? "?"}★)`);
     } catch (err) {
       console.log(`  ✗ "${place.title}" — ${err instanceof Error ? err.message : err}`);
     }

@@ -53,6 +53,7 @@ export interface Enrichment {
   priceLevel: number | null;
   website: string | null;
   permanentlyClosed: boolean;
+  photoNames: string[]; // Places photo resource names (up to 3), for storePlacePhotos
 }
 
 // One enriched Places lookup for a place we're about to create. Non-fatal:
@@ -69,6 +70,7 @@ export async function enrichNewPlace(name: string): Promise<Enrichment | null> {
       priceLevel: found.priceLevel,
       website: found.website,
       permanentlyClosed: found.businessStatus === "CLOSED_PERMANENTLY",
+      photoNames: found.photoNames,
     };
   } catch (err) {
     console.warn(`  Places enrichment failed for "${name}": ${err instanceof Error ? err.message : err}`);

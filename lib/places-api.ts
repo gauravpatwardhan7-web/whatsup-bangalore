@@ -19,7 +19,7 @@ export interface FoundPlace {
   formattedAddress: string | null;
   lat: number;
   lng: number;
-  photoName: string | null; // resource name for the photo media endpoint
+  photoNames: string[]; // resource names for the photo media endpoint (up to a few)
   // Enrichment (Atmosphere-tier fields — costs more, fetch sparingly).
   editorialSummary: string | null; // Google's own one-paragraph venue blurb
   rating: number | null;           // 0–5 stars
@@ -95,7 +95,7 @@ export async function findPlace(query: string, enriched = false): Promise<FoundP
     formattedAddress: p.formattedAddress ?? null,
     lat: p.location?.latitude ?? 0,
     lng: p.location?.longitude ?? 0,
-    photoName: p.photos?.[0]?.name ?? null,
+    photoNames: (p.photos ?? []).slice(0, 3).map((ph) => ph.name).filter(Boolean),
     editorialSummary: p.editorialSummary?.text ?? null,
     rating: typeof p.rating === "number" ? p.rating : null,
     ratingCount: typeof p.userRatingCount === "number" ? p.userRatingCount : null,

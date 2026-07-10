@@ -32,6 +32,7 @@ import { CATEGORIES, type Category } from "../lib/ds";
 import { findDuplicate } from "../lib/guardrails";
 import { chunk, extractCandidates, type Candidate } from "./llm-extract";
 import { geocodeInBlr, enrichNewPlace } from "./resolve-place";
+import { storePlacePhotos } from "./place-photos";
 
 // Broadened beyond r/bangalore to the city's food/social subs. Override with a
 // comma-separated SUBREDDITS env var without touching code.
@@ -336,6 +337,12 @@ async function main() {
       placeId = created.id;
       placesCreated++;
       existingPlaces.push({ id: placeId, title: cand.name, lat: geo.lat, lng: geo.lng });
+
+      // Store up to 3 real Google photos; fall back to the placeholder above if none.
+      const photos = await storePlacePhotos(supabase!, placeId, enrich?.photoNames ?? []);
+      if (photos.length) {
+        await supabase!.from("places").update({ image_url: photos[0], image_urls: photos }).eq("id", placeId);
+      }
     }
 
     const { error: mErr } = await supabase!
