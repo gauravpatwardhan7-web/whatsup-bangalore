@@ -48,12 +48,13 @@ async function main() {
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false }, realtime: { transport: ws as unknown as WebSocketLikeConstructor } });
   const { data: places, error } = await supabase
     .from("places")
-    .select("id, title, area, image_url")
+    .select("id, title, area, image_url, rating")
     .neq("status", "rejected");
   if (error) throw error;
 
-  let targets = (places ?? []).filter((p) => isPlaceholder(p.image_url));
-  console.log(`${targets.length} place(s) with placeholder images${dryRun ? " (dry run)" : ""}.`);
+  // Refresh anything still on a placeholder image OR not yet enriched (no rating).
+  let targets = (places ?? []).filter((p) => isPlaceholder(p.image_url) || p.rating == null);
+  console.log(`${targets.length} place(s) needing photo/enrichment${dryRun ? " (dry run)" : ""}.`);
   if (targets.length > limit) {
     targets = targets.slice(0, limit);
     console.log(`Processing the first ${targets.length} (--limit).`);
@@ -62,36 +63,48 @@ async function main() {
   let updated = 0;
   for (const place of targets) {
     try {
-      const found = await findPlace(place.area ? `${place.title} ${place.area}` : place.title);
-      if (!found?.photoName) {
-        console.log(`  ✗ "${place.title}" — no Places match/photo`);
+      // Enriched lookup: photo + rating/price/website in one call (migration 0009).
+      const found = await findPlace(place.area ? `${place.title} ${place.area}` : place.title, true);
+      if (!found) {
+        console.log(`  ✗ "${place.title}" — no Places match`);
         continue;
       }
+      // Enrichment fields to backfill even when there's no photo.
+      const enrichUpdate = {
+        rating: found.rating,
+        rating_count: found.ratingCount,
+        price_level: found.priceLevel,
+        website: found.website,
+      };
       if (dryRun) {
-        console.log(`  ~ "${place.title}" → ${found.displayName} (photo available)`);
+        console.log(`  ~ "${place.title}" → ${found.displayName} · ${found.rating ?? "?"}★ · ${found.photoName ? "photo" : "no photo"}`);
         continue;
       }
-      const { bytes, contentType } = await fetchPlacePhoto(found.photoName);
-      const ext = contentType.includes("png") ? "png" : "jpg";
-      const path = `places-api/${place.id}.${ext}`;
-      const { error: upErr } = await supabase.storage
-        .from("place-images")
-        .upload(path, bytes, { contentType, cacheControl: "31536000", upsert: true });
-      if (upErr) throw upErr;
-      const publicUrl = supabase.storage.from("place-images").getPublicUrl(path).data.publicUrl;
+      let photoUpdate: { image_url: string; image_urls: string[] } | null = null;
+      if (found.photoName) {
+        const { bytes, contentType } = await fetchPlacePhoto(found.photoName);
+        const ext = contentType.includes("png") ? "png" : "jpg";
+        const path = `places-api/${place.id}.${ext}`;
+        const { error: upErr } = await supabase.storage
+          .from("place-images")
+          .upload(path, bytes, { contentType, cacheControl: "31536000", upsert: true });
+        if (upErr) throw upErr;
+        const publicUrl = supabase.storage.from("place-images").getPublicUrl(path).data.publicUrl;
+        photoUpdate = { image_url: publicUrl, image_urls: [publicUrl] };
+      }
       const { error: dbErr } = await supabase
         .from("places")
-        .update({ image_url: publicUrl, image_urls: [publicUrl] })
+        .update({ ...enrichUpdate, ...(photoUpdate ?? {}) })
         .eq("id", place.id);
       if (dbErr) throw dbErr;
       updated++;
-      console.log(`  ✓ "${place.title}" — real photo set`);
+      console.log(`  ✓ "${place.title}" — ${photoUpdate ? "photo + " : ""}enrichment set (${found.rating ?? "?"}★)`);
     } catch (err) {
       console.log(`  ✗ "${place.title}" — ${err instanceof Error ? err.message : err}`);
     }
     await sleep(300); // gentle on the Places quota
   }
-  console.log(`\nDone. ${updated} place photo(s) updated.`);
+  console.log(`\nDone. ${updated} place(s) updated.`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {

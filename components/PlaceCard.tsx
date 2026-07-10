@@ -80,6 +80,9 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
               {place.my_vote === -1 ? "▼" : "▲"} {place.vote_count}
             </span>
             <span>💬 {place.comment_count}</span>
+            {place.rating != null && (
+              <span style={{ color: "#b45309" }}>★ {place.rating.toFixed(1)}</span>
+            )}
           </div>
         </div>
         {place.image_url ? (

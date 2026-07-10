@@ -26,10 +26,10 @@ import { GoogleGenAI } from "@google/genai";
 import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { CATEGORIES, type Category } from "../lib/ds";
-import { searchBangalore } from "../lib/geocode";
-import { isInBengaluru, findDuplicate } from "../lib/guardrails";
+import { findDuplicate } from "../lib/guardrails";
 import { photoUrlFor } from "./ingest-reddit";
 import { chunk, extractCandidates, type Candidate } from "./llm-extract";
+import { geocodeInBlr, enrichNewPlace } from "./resolve-place";
 
 const YT_BASE = "https://www.googleapis.com/youtube/v3";
 const QUERIES = (process.env.YOUTUBE_QUERIES?.split(",").map((s) => s.trim()).filter(Boolean)) ?? [
@@ -45,6 +45,9 @@ const CHUNK_SIZE = 10;
 // "-latest" alias, not a pinned snapshot — see ingest-reddit.ts for why.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 const MATCH_RADIUS_M = 200;
+// See ingest-reddit.ts — a new place must clear this source-engagement bar;
+// linking to an existing place has no floor. Env-tunable.
+const MIN_CREATE_ENGAGEMENT = Number(process.env.MIN_CREATE_ENGAGEMENT ?? 3.0);
 const CATEGORY_KEYS = Object.keys(CATEGORIES) as Category[];
 
 interface Video {
@@ -141,7 +144,9 @@ Extract ONLY a place/event when the video names a specific venue a person could 
 
 Do NOT extract: general city discussion, vlogs with no named venue, real-estate/apartment content, generic areas alone ("Indiranagar"), companies/offices, clickbait lists with no actual venue names in the text, or places outside Bengaluru. Only extract venues the video recommends or showcases positively — skip venues that are the backdrop of news, complaints, or incidents.
 
-For each kept place, choose the single best category from the allowed list, write a one-sentence reason drawn from the video about why it's worth visiting, and set is_event=true only for time-bound events. post_number is the number shown before the video. Deduplicate within a video.`;
+For each kept place, choose the single best category from the allowed list, and set is_event=true only for time-bound events. post_number is the number shown before the video. Deduplicate within a video.
+
+For "reason", write 2-3 informative sentences a local would find useful — what the place is, what it's known for, and why it's worth going (signature dishes, the vibe, what to order). Draw specifics from the video title/description; don't pad with generic filler. If detail is thin, keep it to what you can genuinely say.`;
 
 function buildPrompt(videos: Video[], baseIndex: number): string {
   const numbered = videos
@@ -223,9 +228,7 @@ async function main() {
   let placesCreated = 0;
 
   for (const { cand, video } of candidates) {
-    const results = await searchBangalore(cand.name);
-    await sleep(1100); // Nominatim: max 1 req/sec
-    const geo = results.find((r) => isInBengaluru(r.lat, r.lng));
+    const geo = await geocodeInBlr(cand.name);
     if (!geo) {
       console.log(`  ✗ "${cand.name}" — couldn't geocode inside Bengaluru`);
       continue;
@@ -233,28 +236,43 @@ async function main() {
 
     const category = normalizeCategory(cand.category, cand.is_event);
     const engagement = normalizeYtEngagement(video.views, video.likes, video.comments);
+    const match = matchExisting(cand.name, geo.lat, geo.lng, existingPlaces);
 
-    if (dryRun) {
-      console.log(`  ~ would record: "${cand.name}" (${category}) @ ${geo.lat.toFixed(4)},${geo.lng.toFixed(4)} eng=${engagement}`);
+    // Floor applies only to creating a new place; linking always counts.
+    if (!match && engagement < MIN_CREATE_ENGAGEMENT) {
+      console.log(`  ⊘ "${cand.name}" — below trending bar (eng ${engagement} < ${MIN_CREATE_ENGAGEMENT}), not creating`);
       continue;
     }
 
-    const match = matchExisting(cand.name, geo.lat, geo.lng, existingPlaces);
+    if (dryRun) {
+      console.log(`  ~ would ${match ? "link" : "create"}: "${cand.name}" (${category}) @ ${geo.lat.toFixed(4)},${geo.lng.toFixed(4)} eng=${engagement}`);
+      continue;
+    }
+
     let placeId: string;
     if (match) {
       placeId = match.id;
     } else {
+      const enrich = await enrichNewPlace(cand.name);
+      if (enrich?.permanentlyClosed) {
+        console.log(`  ⊘ "${cand.name}" — Google reports it permanently closed, skipping`);
+        continue;
+      }
       const { data: created, error: placeErr } = await supabase!
         .from("places")
         .insert({
           title: cand.name,
-          description: cand.reason,
+          description: enrich?.description ?? cand.reason,
           category,
           lat: geo.lat,
           lng: geo.lng,
-          address: geo.label.split(",").slice(0, 2).join(","),
+          address: geo.address,
           image_url: photoUrlFor(category, cand.name),
           source_url: video.url,
+          rating: enrich?.rating ?? null,
+          rating_count: enrich?.ratingCount ?? null,
+          price_level: enrich?.priceLevel ?? null,
+          website: enrich?.website ?? null,
           status: "pending",
           source: "youtube",
           created_by: null,

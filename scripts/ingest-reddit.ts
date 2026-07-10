@@ -29,9 +29,9 @@ import { GoogleGenAI } from "@google/genai";
 import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { CATEGORIES, type Category } from "../lib/ds";
-import { searchBangalore } from "../lib/geocode";
-import { isInBengaluru, findDuplicate } from "../lib/guardrails";
+import { findDuplicate } from "../lib/guardrails";
 import { chunk, extractCandidates, type Candidate } from "./llm-extract";
+import { geocodeInBlr, enrichNewPlace } from "./resolve-place";
 
 // Broadened beyond r/bangalore to the city's food/social subs. Override with a
 // comma-separated SUBREDDITS env var without touching code.
@@ -56,6 +56,11 @@ const CHUNK_SIZE = 10; // posts per LLM call — smaller chunks parse more relia
 // (gemini-2.5-flash 404'd in prod on 2026-07-10) without touching aliases.
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-flash-latest";
 const MATCH_RADIUS_M = 200; // an extracted place within this of an existing one, same-ish name → merge
+// A brand-new place must clear this source-engagement bar (0–6 scale) to be
+// created — one weak mention shouldn't mint a pin. Linking a mention to an
+// existing place has no floor (every signal still feeds trending_score).
+// Tunable without a code change via MIN_CREATE_ENGAGEMENT.
+const MIN_CREATE_ENGAGEMENT = Number(process.env.MIN_CREATE_ENGAGEMENT ?? 3.0);
 const USER_AGENT = "whatsup-bangalore-ingest/1.0 (https://github.com/gauravpatwardhan7-web/whatsup-bangalore)";
 const CATEGORY_KEYS = Object.keys(CATEGORIES) as Category[];
 
@@ -182,7 +187,9 @@ Do NOT extract: general city discussion, complaints, traffic/civic rants, questi
 
 CRITICAL — intent check. Extract a place ONLY when the post recommends, reviews, or is genuinely about going there / the experience of being there (great food, good vibe, a gig, a thing to do). Do NOT extract a venue that is merely the incidental backdrop of a different story — a crime, accident, scam, arrest, complaint, traffic/toll gripe, lost-and-found, protest, or news incident. If the post's real subject is a problem or event that just happens to occur at/near a named place, return nothing for it. Examples of what to SKIP: "spotted X near Church Street, why no police action" (a complaint — skip Church Street), "BMTC charges toll at the airport" (a fare gripe — skip the airport), "accident near Toit yesterday" (skip Toit).
 
-For each kept place, choose the single best category from the allowed list, write a one-sentence reason drawn from the post about why it's worth visiting, and set is_event=true only for time-bound events. post_number is the number shown before the post. If a post yields no specific recommended place, include nothing for it. Deduplicate within a post.`;
+For each kept place, choose the single best category from the allowed list, and set is_event=true only for time-bound events. post_number is the number shown before the post. If a post yields no specific recommended place, include nothing for it. Deduplicate within a post.
+
+For "reason", write 2-3 informative sentences a local would find useful — what the place is, what it's known for, and why it's worth going (signature dishes, the vibe, what to order, best time to visit). Draw specifics from the post; don't pad with generic filler like "a great place to visit". If the post is thin on detail, keep it to what you can genuinely say.`;
 
 function buildPrompt(posts: RedditPost[], baseIndex: number): string {
   const numbered = posts
@@ -268,9 +275,7 @@ async function main() {
   let placesCreated = 0;
 
   for (const { cand, post } of candidates) {
-    const results = await searchBangalore(cand.name);
-    await sleep(1100); // Nominatim: max 1 req/sec
-    const geo = results.find((r) => isInBengaluru(r.lat, r.lng));
+    const geo = await geocodeInBlr(cand.name);
     if (!geo) {
       console.log(`  ✗ "${cand.name}" — couldn't geocode inside Bengaluru`);
       continue;
@@ -279,28 +284,45 @@ async function main() {
     const category = normalizeCategory(cand.category, cand.is_event);
     const engagement = normalizeEngagement(post.score, post.numComments);
     const mentionedAt = new Date(post.createdUtc * 1000).toISOString();
+    const match = matchExisting(cand.name, geo.lat, geo.lng, existingPlaces);
 
-    if (dryRun) {
-      console.log(`  ~ would record: "${cand.name}" (${category}) @ ${geo.lat.toFixed(4)},${geo.lng.toFixed(4)} eng=${engagement}`);
+    // Floor applies only to creating a new place; linking always counts.
+    if (!match && engagement < MIN_CREATE_ENGAGEMENT) {
+      console.log(`  ⊘ "${cand.name}" — below trending bar (eng ${engagement} < ${MIN_CREATE_ENGAGEMENT}), not creating`);
       continue;
     }
 
-    const match = matchExisting(cand.name, geo.lat, geo.lng, existingPlaces);
+    if (dryRun) {
+      console.log(`  ~ would ${match ? "link" : "create"}: "${cand.name}" (${category}) @ ${geo.lat.toFixed(4)},${geo.lng.toFixed(4)} eng=${engagement}`);
+      continue;
+    }
+
     let placeId: string;
     if (match) {
       placeId = match.id;
     } else {
+      // Enrich a brand-new place from Google Places (description/rating/etc.),
+      // and skip anything Google reports as permanently closed.
+      const enrich = await enrichNewPlace(cand.name);
+      if (enrich?.permanentlyClosed) {
+        console.log(`  ⊘ "${cand.name}" — Google reports it permanently closed, skipping`);
+        continue;
+      }
       const { data: created, error: placeErr } = await supabase!
         .from("places")
         .insert({
           title: cand.name,
-          description: cand.reason,
+          description: enrich?.description ?? cand.reason,
           category,
           lat: geo.lat,
           lng: geo.lng,
-          address: geo.label.split(",").slice(0, 2).join(","),
+          address: geo.address,
           image_url: photoUrlFor(category, cand.name),
           source_url: post.permalink,
+          rating: enrich?.rating ?? null,
+          rating_count: enrich?.ratingCount ?? null,
+          price_level: enrich?.priceLevel ?? null,
+          website: enrich?.website ?? null,
           status: "pending", // human moderation backstop before it shows on the map
           source: "reddit",
           created_by: null,

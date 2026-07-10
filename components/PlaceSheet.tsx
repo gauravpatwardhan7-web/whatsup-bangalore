@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { CATEGORIES, DS, FLOAT_SHADOW, placeTier } from "@/lib/ds";
 import { addComment, fetchComments, fetchPlaceSignals, setVote, type PlaceSignal } from "@/lib/data";
-import { formatEventWindow, timeAgo } from "@/lib/format";
+import { formatEventWindow, priceLabel, timeAgo } from "@/lib/format";
 import type { Place, PlaceComment, SessionUser } from "@/lib/types";
 
 interface Props {
@@ -124,6 +124,21 @@ export default function PlaceSheet({
             <div style={{ fontSize: 12.5, color: DS.textSub, marginTop: 3 }}>
               {cat.label}{place.area ? ` · ${place.area}` : ""}{place.address ? ` · ${place.address}` : ""}
             </div>
+            {(place.rating != null || priceLabel(place.price_level)) && (
+              <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 5, fontSize: 12.5, fontWeight: 700 }}>
+                {place.rating != null && (
+                  <span style={{ color: "#b45309" }}>
+                    ★ {place.rating.toFixed(1)}
+                    {place.rating_count != null && (
+                      <span style={{ color: DS.textMut, fontWeight: 500 }}> ({place.rating_count.toLocaleString("en-IN")})</span>
+                    )}
+                  </span>
+                )}
+                {priceLabel(place.price_level) && (
+                  <span style={{ color: DS.textSub }}>{priceLabel(place.price_level)}</span>
+                )}
+              </div>
+            )}
           </div>
           <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
             {canEdit && (
@@ -203,13 +218,22 @@ export default function PlaceSheet({
         <p style={{ fontSize: 14, lineHeight: 1.55, color: DS.text, margin: 0 }}>
           {place.description}
         </p>
-        {place.source_url && (
-          <a href={place.source_url} target="_blank" rel="noopener noreferrer" style={{
-            display: "inline-block", marginTop: 10, fontSize: 12.5, fontWeight: 600, color: DS.accent,
-          }}>
-            View source ↗
-          </a>
-        )}
+        <div style={{ display: "flex", gap: 16, marginTop: 10, flexWrap: "wrap" }}>
+          {place.website && (
+            <a href={place.website} target="_blank" rel="noopener noreferrer" style={{
+              fontSize: 12.5, fontWeight: 600, color: DS.accent,
+            }}>
+              Website ↗
+            </a>
+          )}
+          {place.source_url && (
+            <a href={place.source_url} target="_blank" rel="noopener noreferrer" style={{
+              fontSize: 12.5, fontWeight: 600, color: DS.accent,
+            }}>
+              View source ↗
+            </a>
+          )}
+        </div>
 
         {/* Transparency: show what's actually driving the trending badge —
             upvotes, discussion, and external mentions (with links to the source). */}

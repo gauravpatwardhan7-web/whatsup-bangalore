@@ -1,3 +1,9 @@
+// Google price_level 0–4 → rupee symbols (null/undefined → empty).
+export function priceLabel(level: number | null | undefined): string {
+  if (level == null || level < 1) return "";
+  return "₹".repeat(Math.min(4, level));
+}
+
 export function timeAgo(iso: string): string {
   const seconds = (Date.now() - new Date(iso).getTime()) / 1000;
   if (seconds < 3600) return `${Math.max(1, Math.floor(seconds / 60))}m ago`;

@@ -118,3 +118,25 @@ Gemini chunk is just skipped (previous behavior — no regression). Mistral's
 free tier is rate-limited to 2 requests/minute, so fallback calls are
 throttled to respect that; fine for a background job. Override the fallback
 model with `MISTRAL_MODEL`.
+
+## Place resolution + enrichment (`resolve-place.ts`)
+
+Shared by both ingestion scripts. **Geocoding** tries Nominatim/OSM first (free),
+then falls back to Google Places — OSM doesn't know small local institutions
+(e.g. Shivaji Military Hotel) that Google does, so the fallback rescues most
+"couldn't geocode" misses. Needs `GOOGLE_PLACES_API_KEY`.
+
+**Trending floor:** a brand-new place must clear a source-engagement bar
+(`MIN_CREATE_ENGAGEMENT`, default 3.0 on the 0–6 scale) before it's created —
+one weak mention shouldn't mint a pin. Linking a mention to a place that
+*already exists* has no floor (every signal still feeds `trending_score`, which
+sums all mentions with time decay). Note: views/likes/comments already flow into
+each mention's `engagement_score`, and mention *count* already accumulates in
+`trending_score` — the floor just adds a quality gate on creation.
+
+**Enrichment:** when creating a new place, one Atmosphere-tier Places call pulls
+Google's editorial description (used over the LLM's when present), rating +
+review count, price level, website, and business status (permanently-closed
+places are skipped). Requires migration `0009` for the `rating`/`rating_count`/
+`price_level`/`website` columns. `refresh-place-photos.ts` backfills the same
+fields onto existing places.
