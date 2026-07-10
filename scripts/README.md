@@ -100,3 +100,21 @@ Google URL or key in the client). Key is swappable via `lib/places-api.ts`:
 `GOOGLE_PLACES_API_KEY` (real) wins over `PLACES_API_DEMO_KEY` (placeholder in
 `.env.local`; requests with it fail gracefully per place). Run manually when a
 real key lands: `npm run photos:refresh` (or `-- --dry-run`; `-- --limit 5` caps the batch).
+
+## LLM extraction + Mistral fallback (`llm-extract.ts`)
+
+Shared by both ingestion scripts: calls Gemini (`gemini-flash-latest` — an
+alias, not a pinned snapshot, so Google sunsetting a dated model ID like
+`gemini-2.5-flash` — as happened 2026-07-10 — doesn't break the pipeline
+again) with strict JSON-schema output. If Gemini's daily free-tier quota is
+exhausted, the model itself gets sunset, or a chunk's calls keep failing, it
+falls back to Mistral (`mistral-large-latest`, also an alias) using Mistral's
+own strict `json_schema` structured output — same reliability guarantee,
+different provider. Falls back per chunk, so a partial Gemini outage doesn't
+lose an entire run.
+
+Requires `MISTRAL_API_KEY` for the fallback to activate; without it, a failed
+Gemini chunk is just skipped (previous behavior — no regression). Mistral's
+free tier is rate-limited to 2 requests/minute, so fallback calls are
+throttled to respect that; fine for a background job. Override the fallback
+model with `MISTRAL_MODEL`.

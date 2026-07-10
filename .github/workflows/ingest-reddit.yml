@@ -30,6 +30,8 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           # Posts come from Arctic Shift (keyless, not IP-blocked) — no Reddit creds needed.
+          # Fallback when Gemini's daily quota is hit or a model gets sunset (see scripts/llm-extract.ts).
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
       - name: Run YouTube ingestion
         # No-ops politely until the YOUTUBE_API_KEY secret exists.
         if: always()
@@ -39,3 +41,4 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}

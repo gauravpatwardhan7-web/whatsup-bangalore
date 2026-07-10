@@ -13,20 +13,23 @@
  *
  * Env: YOUTUBE_API_KEY (required), SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL),
  *      SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY (or GOOGLE_API_KEY),
- *      optional GEMINI_MODEL, YOUTUBE_QUERIES (comma-separated search terms).
+ *      optional GEMINI_MODEL, YOUTUBE_QUERIES (comma-separated search terms),
+ *      optional MISTRAL_API_KEY (fallback when Gemini's daily quota is hit —
+ *      see scripts/llm-extract.ts), optional MISTRAL_MODEL.
  *
  * Requires migration 0008 (adds 'youtube' to the mentions.platform and
  * places.source check constraints).
  */
 
 import { fileURLToPath } from "node:url";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { CATEGORIES, type Category } from "../lib/ds";
 import { searchBangalore } from "../lib/geocode";
 import { isInBengaluru, findDuplicate } from "../lib/guardrails";
-import { chunk, parseCandidates, photoUrlFor } from "./ingest-reddit";
+import { photoUrlFor } from "./ingest-reddit";
+import { chunk, extractCandidates, type Candidate } from "./llm-extract";
 
 const YT_BASE = "https://www.googleapis.com/youtube/v3";
 const QUERIES = (process.env.YOUTUBE_QUERIES?.split(",").map((s) => s.trim()).filter(Boolean)) ?? [
@@ -54,14 +57,6 @@ interface Video {
   likes: number;
   comments: number;
   publishedAt: string; // ISO
-}
-
-interface Candidate {
-  post_number: number;
-  name: string;
-  category: string;
-  reason: string;
-  is_event: boolean;
 }
 
 // Views dwarf Reddit scores, so compress harder; same 0–6 range the trending
@@ -140,28 +135,6 @@ async function fetchVideos(key: string): Promise<Video[]> {
   return videos.slice(0, HOT_LIMIT);
 }
 
-const EXTRACTION_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    places: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          post_number: { type: Type.INTEGER },
-          name: { type: Type.STRING },
-          category: { type: Type.STRING, enum: CATEGORY_KEYS },
-          reason: { type: Type.STRING },
-          is_event: { type: Type.BOOLEAN },
-        },
-        required: ["post_number", "name", "category", "reason", "is_event"],
-        propertyOrdering: ["post_number", "name", "category", "reason", "is_event"],
-      },
-    },
-  },
-  required: ["places"],
-};
-
 const SYSTEM_PROMPT = `You extract specific, real, visitable places and events in Bengaluru (Bangalore), India from YouTube video titles and descriptions, to plot on a local map.
 
 Extract ONLY a place/event when the video names a specific venue a person could go to: a named restaurant, cafe, bar, brewery, park, market, shop, museum, gallery, venue, or a specific dated event/festival. The name must be specific enough to geocode ("Toit", "Cubbon Park", "VV Puram Food Street").
@@ -170,47 +143,11 @@ Do NOT extract: general city discussion, vlogs with no named venue, real-estate/
 
 For each kept place, choose the single best category from the allowed list, write a one-sentence reason drawn from the video about why it's worth visiting, and set is_event=true only for time-bound events. post_number is the number shown before the video. Deduplicate within a video.`;
 
-async function extractCandidates(ai: GoogleGenAI, videos: Video[], baseIndex: number): Promise<Candidate[]> {
+function buildPrompt(videos: Video[], baseIndex: number): string {
   const numbered = videos
     .map((v, i) => `[${baseIndex + i}] ${v.title} (channel: ${v.channel})${v.description ? `\n${v.description}` : ""}`)
     .join("\n\n");
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    let text: string | undefined;
-    try {
-      const resp = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: `Videos:\n\n${numbered}`,
-        config: {
-          systemInstruction: SYSTEM_PROMPT,
-          responseMimeType: "application/json",
-          responseSchema: EXTRACTION_SCHEMA,
-          temperature: 0,
-        },
-      });
-      text = resp.text;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (/PerDay|RequestsPerDay|free_tier_requests/i.test(msg)) {
-        console.warn("  Gemini daily free-tier quota exhausted — skipping remaining extraction.");
-        return [];
-      }
-      if (attempt === 3 || !/\b429\b|RESOURCE_EXHAUSTED|quota/i.test(msg)) {
-        console.warn(`  extraction call failed (attempt ${attempt}) — skipping chunk: ${msg.slice(0, 160)}`);
-        return [];
-      }
-      const retryMs = /"retryDelay":"(\d+)/.exec(msg)?.[1];
-      await sleep(retryMs ? Number(retryMs) * 1000 + 1000 : 5000 * attempt);
-      continue;
-    }
-    const parsed = parseCandidates(text);
-    if (parsed) return parsed as Candidate[];
-    if (attempt === 3) {
-      console.warn("  couldn't parse extraction JSON after 3 attempts — skipping chunk");
-      return [];
-    }
-    await sleep(1500 * attempt);
-  }
-  return [];
+  return `Videos:\n\n${numbered}`;
 }
 
 function normalizeCategory(c: string, isEvent: boolean): Category {
@@ -272,7 +209,7 @@ async function main() {
   const candidates: { cand: Candidate; video: Video }[] = [];
   let base = 0;
   for (const group of chunk(fresh, CHUNK_SIZE)) {
-    const extracted = await extractCandidates(ai, group, base);
+    const extracted = await extractCandidates(ai, GEMINI_MODEL, SYSTEM_PROMPT, buildPrompt(group, base));
     for (const c of extracted) {
       const video = fresh[c.post_number];
       if (video) candidates.push({ cand: c, video });

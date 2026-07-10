@@ -19,16 +19,19 @@
  *   npx tsx scripts/ingest-reddit.ts --dry-run
  *
  * Env: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY,
- *      GEMINI_API_KEY (or GOOGLE_API_KEY), optional GEMINI_MODEL.
+ *      GEMINI_API_KEY (or GOOGLE_API_KEY), optional GEMINI_MODEL,
+ *      optional MISTRAL_API_KEY (fallback when Gemini's daily quota is hit —
+ *      see scripts/llm-extract.ts), optional MISTRAL_MODEL.
  */
 
 import { fileURLToPath } from "node:url";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI } from "@google/genai";
 import { createClient, type WebSocketLikeConstructor } from "@supabase/supabase-js";
 import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unused here, but the client insists)
 import { CATEGORIES, type Category } from "../lib/ds";
 import { searchBangalore } from "../lib/geocode";
 import { isInBengaluru, findDuplicate } from "../lib/guardrails";
+import { chunk, extractCandidates, type Candidate } from "./llm-extract";
 
 // Broadened beyond r/bangalore to the city's food/social subs. Override with a
 // comma-separated SUBREDDITS env var without touching code.
@@ -76,14 +79,6 @@ export interface RedditPost {
   createdUtc: number; // seconds
 }
 
-interface Candidate {
-  post_number: number;
-  name: string;
-  category: string;
-  reason: string;
-  is_event: boolean;
-}
-
 // ── pure helpers (unit-tested) ────────────────────────────────────────────────
 
 // Normalize Reddit engagement into the modest range the trending view expects
@@ -117,12 +112,6 @@ export function parseRedditPosts(json: unknown): RedditPost[] {
     });
   }
   return posts;
-}
-
-export function chunk<T>(arr: T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
-  return out;
 }
 
 function normalizeCategory(c: string, isEvent: boolean): Category {
@@ -185,28 +174,6 @@ async function fetchHotPosts(): Promise<RedditPost[]> {
   return deduped.slice(0, HOT_LIMIT);
 }
 
-const EXTRACTION_SCHEMA = {
-  type: Type.OBJECT,
-  properties: {
-    places: {
-      type: Type.ARRAY,
-      items: {
-        type: Type.OBJECT,
-        properties: {
-          post_number: { type: Type.INTEGER },
-          name: { type: Type.STRING },
-          category: { type: Type.STRING, enum: CATEGORY_KEYS },
-          reason: { type: Type.STRING },
-          is_event: { type: Type.BOOLEAN },
-        },
-        required: ["post_number", "name", "category", "reason", "is_event"],
-        propertyOrdering: ["post_number", "name", "category", "reason", "is_event"],
-      },
-    },
-  },
-  required: ["places"],
-};
-
 const SYSTEM_PROMPT = `You extract specific, real, visitable places and events in Bengaluru (Bangalore), India from Reddit posts, to plot on a local map.
 
 Extract ONLY a place/event when the post names a specific venue a person could go to: a named restaurant, cafe, bar, brewery, park, market, shop, museum, gallery, venue, or a specific dated event/festival. The name must be specific enough to geocode ("Toit", "Cubbon Park", "VV Puram Food Street", "Lollapalooza India at Bangalore Palace").
@@ -217,84 +184,11 @@ CRITICAL — intent check. Extract a place ONLY when the post recommends, review
 
 For each kept place, choose the single best category from the allowed list, write a one-sentence reason drawn from the post about why it's worth visiting, and set is_event=true only for time-bound events. post_number is the number shown before the post. If a post yields no specific recommended place, include nothing for it. Deduplicate within a post.`;
 
-// Parse the model's response into candidates, tolerating the ways structured
-// output occasionally arrives dirty: markdown ```json fences, or leading/trailing
-// prose around the object. Returns null when nothing parseable is found.
-export function parseCandidates(text: string | undefined): Candidate[] | null {
-  if (!text) return null;
-  const cleaned = text.trim().replace(/^```(?:json)?/i, "").replace(/```$/, "").trim();
-  const tryParse = (s: string): Candidate[] | null => {
-    try {
-      const parsed = JSON.parse(s) as { places?: Candidate[] };
-      return Array.isArray(parsed.places) ? parsed.places : null;
-    } catch {
-      return null;
-    }
-  };
-  const direct = tryParse(cleaned);
-  if (direct) return direct;
-  // Fallback: extract the outermost {...} and try that.
-  const start = cleaned.indexOf("{");
-  const end = cleaned.lastIndexOf("}");
-  if (start >= 0 && end > start) return tryParse(cleaned.slice(start, end + 1));
-  return null;
-}
-
-async function extractCandidates(ai: GoogleGenAI, posts: RedditPost[], baseIndex: number): Promise<Candidate[]> {
+function buildPrompt(posts: RedditPost[], baseIndex: number): string {
   const numbered = posts
     .map((p, i) => `[${baseIndex + i}] ${p.title}${p.selftext ? `\n${p.selftext}` : ""}`)
     .join("\n\n");
-
-  // A rate-limit (429), transient error, or an unparseable body on one chunk
-  // shouldn't abort the whole run. Retry with backoff (honoring the API's
-  // retryDelay when given); after the last attempt, skip the chunk so the
-  // chunks that did parse still get written.
-  for (let attempt = 1; attempt <= 3; attempt++) {
-    let text: string | undefined;
-    try {
-      const resp = await ai.models.generateContent({
-        model: GEMINI_MODEL,
-        contents: `Posts:\n\n${numbered}`,
-        config: {
-          systemInstruction: SYSTEM_PROMPT,
-          responseMimeType: "application/json",
-          responseSchema: EXTRACTION_SCHEMA,
-          temperature: 0,
-        },
-      });
-      text = resp.text;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const isRateLimit = /\b429\b|RESOURCE_EXHAUSTED|quota/i.test(msg);
-      // A per-day quota can't clear by waiting — bail fast rather than burn minutes.
-      const isDailyQuota = /PerDay|RequestsPerDay|free_tier_requests/i.test(msg);
-      if (isDailyQuota) {
-        console.warn("  Gemini daily free-tier quota exhausted — skipping remaining extraction.");
-        return [];
-      }
-      if (attempt === 3 || !isRateLimit) {
-        console.warn(`  extraction call failed (attempt ${attempt}) — skipping chunk: ${msg.slice(0, 160)}`);
-        return [];
-      }
-      const retryMs = /"retryDelay":"(\d+)/.exec(msg)?.[1];
-      const waitMs = retryMs ? Number(retryMs) * 1000 + 1000 : 5000 * attempt;
-      console.warn(`  extraction rate-limited (attempt ${attempt}) — waiting ${Math.round(waitMs / 1000)}s`);
-      await sleep(waitMs);
-      continue;
-    }
-
-    const parsed = parseCandidates(text);
-    if (parsed) return parsed;
-    // Parseable output failed (blocked/empty/malformed) — retry a couple times
-    // before giving up on this chunk, since it's often transient.
-    if (attempt === 3) {
-      console.warn("  couldn't parse extraction JSON after 3 attempts — skipping chunk");
-      return [];
-    }
-    console.warn(`  couldn't parse extraction JSON (attempt ${attempt}) — retrying`);
-    await sleep(1500 * attempt);
-  }
-  return [];
+  return `Posts:\n\n${numbered}`;
 }
 
 // Existing place matching `name` within MATCH_RADIUS_M of (lat,lng), or null.
@@ -360,7 +254,7 @@ async function main() {
   const candidates: { cand: Candidate; post: RedditPost }[] = [];
   let base = 0;
   for (const group of chunks) {
-    const extracted = await extractCandidates(ai, group, base);
+    const extracted = await extractCandidates(ai, GEMINI_MODEL, SYSTEM_PROMPT, buildPrompt(group, base));
     for (const c of extracted) {
       const post = fresh[c.post_number];
       if (post) candidates.push({ cand: c, post });
