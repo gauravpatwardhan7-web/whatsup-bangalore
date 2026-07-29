@@ -27,6 +27,14 @@ export const SECTIONS: Record<Section, { label: string; categories: string[]; le
   see:   { label: "See",   categories: ["art_culture"],                        lede: "Culture fix" },
 };
 
+const SECTION_ORDER: Section[] = ["eat", "drink", "do", "see"];
+
+// How many headline picks the letter aims for, and how much of it any one
+// section may take (food outnumbers everything else, so it needs a ceiling).
+export const TARGET_PICKS = 10;
+export const MAX_PER_SECTION = 4;
+export const MAX_EVENTS = 5;
+
 export function isRealDescription(p: CuratablePlace): boolean {
   return p.description.trim().length >= 60;
 }
@@ -38,34 +46,79 @@ export function qualifies(p: CuratablePlace): boolean {
   return isRealDescription(p) && trusted;
 }
 
+export interface Pick<T extends CuratablePlace> {
+  place: T;
+  section: Section;
+  /** First pick of its section — renders the full section header. */
+  lead: boolean;
+  /** Compact "also on the radar" names; only ever set on a section's last pick. */
+  alternates: T[];
+}
+
 export interface Curation<T extends CuratablePlace> {
-  picks: { place: T; section: Section }[];
-  runnersUp: Partial<Record<Section, T[]>>;
+  picks: Pick<T>[];
   events: T[];
 }
 
-// One headline pick per section plus up to two compact runners-up — not a
-// ranked dump — plus upcoming events sorted by start.
-export function curate<T extends CuratablePlace>(places: T[]): Curation<T> {
+/**
+ * Builds a varied letter rather than a ranked dump: picks are drawn
+ * round-robin across Eat / Drink / Do / See so consecutive cards change mood,
+ * and within a section we avoid repeating an area until the area pool runs out.
+ * Aims for `target` picks (default 10) and caps any one section at
+ * MAX_PER_SECTION. Upcoming events follow as a compact list.
+ */
+export function curate<T extends CuratablePlace>(
+  places: T[],
+  { target = TARGET_PICKS, maxPerSection = MAX_PER_SECTION }: { target?: number; maxPerSection?: number } = {},
+): Curation<T> {
   const now = Date.now();
   const events = places
     .filter((p) => p.category === "event" && new Date(p.event_end ?? p.event_start ?? 0).getTime() > now)
     .sort((a, b) => new Date(a.event_start ?? 0).getTime() - new Date(b.event_start ?? 0).getTime())
-    .slice(0, 3);
+    .slice(0, MAX_EVENTS);
 
-  const picks: { place: T; section: Section }[] = [];
-  const runnersUp: Partial<Record<Section, T[]>> = {};
-  for (const [section, def] of Object.entries(SECTIONS) as [Section, (typeof SECTIONS)[Section]][]) {
-    const pool = places
-      .filter((p) => def.categories.includes(p.category) && qualifies(p))
-      // trending first; among the quiet ones, let Google ratings break the tie
-      .sort((a, b) => b.trending_score - a.trending_score || (b.rating ?? 0) - (a.rating ?? 0));
-    // prefer a pick with a photo — a headline card without one falls flat
-    const best = pool.find((p) => p.image_url) ?? pool[0];
-    if (best) {
-      picks.push({ place: best, section });
-      runnersUp[section] = pool.filter((p) => p.id !== best.id).slice(0, 2);
+  const pools = new Map<Section, T[]>();
+  for (const section of SECTION_ORDER) {
+    pools.set(
+      section,
+      places
+        .filter((p) => SECTIONS[section].categories.includes(p.category) && qualifies(p))
+        // trending first; among the quiet ones, let Google ratings break the tie
+        .sort((a, b) => b.trending_score - a.trending_score || (b.rating ?? 0) - (a.rating ?? 0)),
+    );
+  }
+
+  const taken = new Set<string>();
+  const usedAreas = new Set<string>();
+  const picks: Pick<T>[] = [];
+  const countBySection = new Map<Section, number>(SECTION_ORDER.map((s) => [s, 0]));
+
+  // Round 0 fills one lead per section, then later rounds deepen each section.
+  for (let round = 0; round < maxPerSection && picks.length < target; round++) {
+    for (const section of SECTION_ORDER) {
+      if (picks.length >= target) break;
+      const pool = pools.get(section)!.filter((p) => !taken.has(p.id));
+      if (pool.length === 0) continue;
+
+      const fresh = pool.filter((p) => !p.area || !usedAreas.has(p.area));
+      const candidates = fresh.length > 0 ? fresh : pool;
+      // A lead card is mostly photo — prefer one that has an image.
+      const best = (round === 0 ? candidates.find((p) => p.image_url) : undefined) ?? candidates[0];
+
+      taken.add(best.id);
+      if (best.area) usedAreas.add(best.area);
+      const lead = countBySection.get(section) === 0;
+      countBySection.set(section, countBySection.get(section)! + 1);
+      picks.push({ place: best, section, lead, alternates: [] });
     }
   }
-  return { picks, runnersUp, events };
+
+  // Runners-up hang off each section's last pick, so no name appears twice.
+  for (const section of SECTION_ORDER) {
+    const last = [...picks].reverse().find((p) => p.section === section);
+    if (!last) continue;
+    last.alternates = pools.get(section)!.filter((p) => !taken.has(p.id)).slice(0, 2);
+  }
+
+  return { picks, events };
 }

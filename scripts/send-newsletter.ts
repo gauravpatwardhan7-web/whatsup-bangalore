@@ -1,9 +1,9 @@
 /**
  * Weekly newsletter — "Your Bangalore weekend, sorted".
  *
- * Runs every Thursday from .github/workflows/newsletter.yml. Instead of a raw
- * top-10 dump, it curates ONE standout place per section (Eat / Drink / Do /
- * See) plus a couple of compact runners-up per section and upcoming events.
+ * Runs every Thursday from .github/workflows/newsletter.yml. It curates ~10
+ * places drawn round-robin across the sections (Eat / Drink / Do / See) so
+ * consecutive cards change mood, plus compact runners-up and upcoming events.
  * For each headline pick, an LLM editorial pass (Gemini, Mistral fallback —
  * same providers as ingestion) turns the raw data into what a reader actually
  * needs to decide and to enjoy the visit: a written-for-humans blurb, 2-3
@@ -18,6 +18,8 @@
  *   npx tsx scripts/send-newsletter.ts --dry-run
  * Write the HTML to a file to eyeball it in a browser:
  *   npx tsx scripts/send-newsletter.ts --dry-run --html-out /tmp/newsletter.html
+ * Real send to yourself only (works with Resend's sandbox sender):
+ *   npx tsx scripts/send-newsletter.ts --to you@example.com
  *
  * Env: SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY,
  *      RESEND_API_KEY, NEWSLETTER_FROM (e.g. "What's Trending Bangalore <hello@yourdomain.com>";
@@ -73,6 +75,8 @@ interface Editorial {
 interface Pick_ {
   place: TrendingPlace;
   section: Section;
+  lead: boolean;
+  alternates: TrendingPlace[];
   mention: Mention | null;
   editorial: Editorial | null;
 }
@@ -311,8 +315,8 @@ function actionLinks(p: TrendingPlace): string {
   return `<div style="font-size:13px;margin-top:16px;font-family:${SANS};">${links.join("&nbsp;&nbsp;&nbsp;")}</div>`;
 }
 
-function pickCard(pick: Pick_, alternates: TrendingPlace[]): string {
-  const { place: p, section, editorial: e } = pick;
+function pickCard(pick: Pick_): string {
+  const { place: p, section, editorial: e, alternates } = pick;
   const def = SECTIONS[section];
   const photo = p.image_url
     ? `<img src="${esc(p.image_url)}" alt="${esc(p.title)}" width="568" style="width:100%;max-width:568px;height:auto;border-radius:12px;display:block;" />`
@@ -331,7 +335,7 @@ function pickCard(pick: Pick_, alternates: TrendingPlace[]): string {
   return `
   <tr><td style="padding:30px 0 4px;">
     <div style="font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:${SAGE};font-weight:700;font-family:${SANS};">
-      ${def.label} <span style="color:${FAINT};font-weight:400;letter-spacing:0;text-transform:none;">— ${def.lede}</span>
+      ${def.label}${pick.lead ? ` <span style="color:${FAINT};font-weight:400;letter-spacing:0;text-transform:none;">— ${def.lede}</span>` : ""}
     </div>
     <h2 style="font-family:${SERIF};font-size:25px;line-height:1.2;color:${INK};margin:8px 0 2px;">${esc(p.title)}${goodFor}</h2>
     ${p.area ? `<div style="font-size:13px;color:${FAINT};font-family:${SANS};">${esc(p.area)}</div>` : ""}
@@ -362,7 +366,6 @@ function eventRow(p: TrendingPlace): string {
 
 export function buildHtml(
   picks: Pick_[],
-  runnersUp: Partial<Record<Section, TrendingPlace[]>>,
   events: TrendingPlace[],
   weekOf: string,
 ): string {
@@ -373,10 +376,10 @@ export function buildHtml(
     <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:${FAINT};text-align:center;">What&rsquo;s Trending Bangalore</div>
     <h1 style="font-family:${SERIF};font-size:32px;line-height:1.15;color:${INK};text-align:center;margin:10px 0 6px;">Your weekend, sorted.</h1>
     <p style="font-size:14px;color:${MUTED};text-align:center;margin:0;line-height:1.6;">
-      Not a top-10 list — ${picks.length} place${picks.length === 1 ? "" : "s"} the city is actually talking about, one for every mood,<br/>with what to know before you go.
+      ${picks.length} place${picks.length === 1 ? "" : "s"} the city is actually talking about — something for every mood,<br/>with what to know before you go.
       <br/><span style="color:${FAINT};font-size:12.5px;">Week of ${weekOf}</span>
     </p>
-    <table style="width:100%;border-collapse:collapse;">${picks.map((p) => pickCard(p, runnersUp[p.section] ?? [])).join("")}</table>
+    <table style="width:100%;border-collapse:collapse;">${picks.map(pickCard).join("")}</table>
     ${events.length ? `
     <div style="margin-top:26px;">
       <div style="font-size:12px;letter-spacing:2.5px;text-transform:uppercase;color:${SAGE};font-weight:700;">This weekend</div>
@@ -396,6 +399,21 @@ export function buildHtml(
 }
 
 // ── provider-swappable email send (currently Resend) ─────────────────────────
+
+// Resend's shared sandbox sender. Mail from it is only ever delivered to the
+// Resend account owner's own address — everyone else gets a 403 validation_error.
+const SANDBOX_FROM_DOMAIN = "resend.dev";
+
+const senderDomain = (from: string) => (from.match(/<?([^<>\s]+)@([^<>\s]+?)>?$/)?.[2] ?? "").toLowerCase();
+
+const SANDBOX_HELP = [
+  `The "from" address uses ${SANDBOX_FROM_DOMAIN}, Resend's sandbox sender, which can only`,
+  "deliver to the Resend account owner's own address. To send to real subscribers:",
+  "  1. Verify a domain at https://resend.com/domains (add the DNS records it gives you).",
+  '  2. Add a GitHub secret NEWSLETTER_FROM, e.g. "What\'s Trending Bangalore <hello@yourdomain.com>".',
+  "Until then, run with --to <your-resend-account-email> to send yourself a real test.",
+].join("\n  ");
+
 async function sendEmail(apiKey: string, from: string, to: string[], subject: string, html: string): Promise<void> {
   const res = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -405,7 +423,9 @@ async function sendEmail(apiKey: string, from: string, to: string[], subject: st
     body: JSON.stringify({ from, to: from, bcc: to, subject, html }),
   });
   if (!res.ok) {
-    throw new Error(`Resend send failed: ${res.status} ${(await res.text()).slice(0, 300)}`);
+    const body = (await res.text()).slice(0, 300);
+    const hint = res.status === 403 && senderDomain(from) === SANDBOX_FROM_DOMAIN ? `\n  ${SANDBOX_HELP}` : "";
+    throw new Error(`Resend send failed: ${res.status} ${body}${hint}`);
   }
 }
 
@@ -443,7 +463,7 @@ async function main() {
   if (error) throw error;
 
   const curation = curate((data ?? []) as TrendingPlace[]);
-  const { runnersUp, events } = curation;
+  const { events } = curation;
   const picks: Pick_[] = curation.picks.map((p) => ({ ...p, mention: null, editorial: null }));
   if (picks.length === 0 && events.length === 0) {
     console.log("Nothing worth curating this week — skipping.");
@@ -454,19 +474,27 @@ async function main() {
 
   const weekOf = new Date().toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" });
   const subject = `Your Bangalore weekend, sorted — ${picks.map((p) => p.place.title).slice(0, 2).join(", ")} & more`;
-  const html = buildHtml(picks, runnersUp, events, weekOf);
+  const html = buildHtml(picks, events, weekOf);
   if (htmlOut) {
     writeFileSync(htmlOut, html);
     console.log(`HTML written to ${htmlOut}`);
   }
 
-  // Recipients: everyone who has signed in (paginated admin list).
-  const emails: string[] = [];
-  for (let page = 1; ; page++) {
-    const { data: users, error: uErr } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
-    if (uErr) throw uErr;
-    for (const u of users.users) if (u.email) emails.push(u.email);
-    if (users.users.length < 1000) break;
+  // Recipients: everyone who has signed in (paginated admin list), unless
+  // --to / NEWSLETTER_TEST_TO overrides it for a single-address test send.
+  const toIdx = process.argv.indexOf("--to");
+  const testTo = (toIdx >= 0 ? process.argv[toIdx + 1] : process.env.NEWSLETTER_TEST_TO) || null;
+  let emails: string[] = [];
+  if (testTo) {
+    emails = testTo.split(",").map((e) => e.trim()).filter(Boolean);
+    console.log(`  Test send — recipients overridden to ${emails.join(", ")}`);
+  } else {
+    for (let page = 1; ; page++) {
+      const { data: users, error: uErr } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+      if (uErr) throw uErr;
+      for (const u of users.users) if (u.email) emails.push(u.email);
+      if (users.users.length < 1000) break;
+    }
   }
   console.log(`${picks.length} pick(s) + ${events.length} event(s); ${emails.length} recipient(s).`);
 
@@ -479,10 +507,28 @@ async function main() {
     return;
   }
 
-  for (const group of chunk(emails, 50)) {
-    await sendEmail(resendKey!, from, group, subject, html);
-    console.log(`  sent to ${group.length} recipient(s)`);
+  if (emails.length === 0) {
+    console.log("No recipients — nothing to send.");
+    return;
   }
+
+  // Preflight: the sandbox sender can't reach a subscriber list, so say why
+  // instead of firing off a doomed request per batch.
+  if (senderDomain(from) === SANDBOX_FROM_DOMAIN && !testTo) {
+    throw new Error(`Refusing to send from the Resend sandbox address.\n  ${SANDBOX_HELP}`);
+  }
+
+  let failed = 0;
+  for (const group of chunk(emails, 50)) {
+    try {
+      await sendEmail(resendKey!, from, group, subject, html);
+      console.log(`  sent to ${group.length} recipient(s)`);
+    } catch (err) {
+      failed += group.length;
+      console.error(`  batch of ${group.length} failed: ${err instanceof Error ? err.message : err}`);
+    }
+  }
+  if (failed > 0) throw new Error(`${failed} of ${emails.length} recipient(s) did not receive the newsletter.`);
   console.log("Done.");
 }
 

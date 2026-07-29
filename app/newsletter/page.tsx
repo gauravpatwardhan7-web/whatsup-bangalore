@@ -42,7 +42,7 @@ export default function NewsletterPage() {
             Your weekend, sorted.
           </h1>
           <p style={{ fontSize: 14.5, color: DS.textSub, lineHeight: 1.6, margin: "0 auto", maxWidth: 460 }}>
-            Not a top-10 list — the places the city is actually talking about, one for every mood.
+            The places the city is actually talking about — something for every mood.
           </p>
         </div>
 
@@ -60,8 +60,8 @@ export default function NewsletterPage() {
           </p>
         )}
 
-        {curation?.picks.map(({ place, section }) => (
-          <PickCard key={place.id} place={place} section={section} alternates={curation.runnersUp[section] ?? []} />
+        {curation?.picks.map(({ place, section, lead, alternates }) => (
+          <PickCard key={place.id} place={place} section={section} lead={lead} alternates={alternates} />
         ))}
 
         {curation && curation.events.length > 0 && (
@@ -96,7 +96,7 @@ export default function NewsletterPage() {
   );
 }
 
-function PickCard({ place, section, alternates }: { place: Place; section: Section; alternates: Place[] }) {
+function PickCard({ place, section, lead, alternates }: { place: Place; section: Section; lead: boolean; alternates: Place[] }) {
   const def = SECTIONS[section];
   const cat = CATEGORIES[place.category as Category];
   return (
@@ -106,7 +106,10 @@ function PickCard({ place, section, alternates }: { place: Place; section: Secti
         boxShadow: CARD_SHADOW, padding: 18, marginTop: 22,
       }}>
         <div style={{ fontSize: 12, letterSpacing: 2, textTransform: "uppercase", color: DS.accent, fontWeight: 700 }}>
-          {def.label} <span style={{ color: DS.textMut, fontWeight: 400, letterSpacing: 0, textTransform: "none" }}>— {def.lede}</span>
+          {def.label}
+          {lead && (
+            <span style={{ color: DS.textMut, fontWeight: 400, letterSpacing: 0, textTransform: "none" }}> — {def.lede}</span>
+          )}
         </div>
         <h2 style={{
           fontFamily: "var(--font-display)", fontSize: 23, fontWeight: 700, color: DS.text,

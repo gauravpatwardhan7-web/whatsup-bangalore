@@ -1,8 +1,10 @@
 name: Weekly newsletter
 
 # Every Thursday at 03:30 UTC (~09:00 IST): curated weekend guide to all users.
-# Needs the RESEND_API_KEY secret (and optionally NEWSLETTER_FROM once a domain
-# is verified in Resend); without it the run is a harmless dry run.
+# Needs RESEND_API_KEY, plus NEWSLETTER_FROM pointing at a domain you have
+# verified at resend.com/domains — Resend's default onboarding@resend.dev sender
+# can only deliver to the Resend account owner, so sends to subscribers 403.
+# Without RESEND_API_KEY the run is a harmless dry run.
 on:
   schedule:
     - cron: "30 3 * * 4"
@@ -12,6 +14,10 @@ on:
         description: "Build the email without sending"
         type: boolean
         default: false
+      test_to:
+        description: "Send only to this address (comma-separated) instead of all users"
+        type: string
+        default: ""
 
 jobs:
   send:
@@ -30,5 +36,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           NEWSLETTER_FROM: ${{ secrets.NEWSLETTER_FROM }}
+          NEWSLETTER_TEST_TO: ${{ inputs.test_to }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           MISTRAL_API_KEY: ${{ secrets.MISTRAL_API_KEY }}
