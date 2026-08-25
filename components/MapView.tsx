@@ -92,21 +92,14 @@ export default function MapView({
     };
 
     if (index) {
-      const b = map.getBounds();
-      // Query half a viewport beyond each edge so bubbles near the border
-      // already exist before they pan into view (no popping at the edges).
-      const padLng = (b.getEast() - b.getWest()) / 2;
-      const padLat = (b.getNorth() - b.getSouth()) / 2;
+      // Cluster over the whole world, not just the viewport. With a few
+      // hundred pins the marker count is tiny, and when every bubble/pin
+      // exists up front, panning never adds, removes, or moves a single
+      // marker — they're geo-anchored and just glide with the map. Bubbles
+      // only regroup on zoom, where regrouping is what the user expects.
+      // (Revisit if the map ever grows to thousands of places.)
       const zoom = Math.round(map.getZoom());
-      const clusters = index.getClusters(
-        [
-          Math.max(-180, b.getWest() - padLng),
-          Math.max(-90, b.getSouth() - padLat),
-          Math.min(180, b.getEast() + padLng),
-          Math.min(90, b.getNorth() + padLat),
-        ],
-        zoom,
-      );
+      const clusters = index.getClusters([-180, -90, 180, 90], zoom);
       for (const c of clusters) {
         const [lng, lat] = c.geometry.coordinates as [number, number];
         const props = c.properties as Supercluster.ClusterProperties | PointProps;
@@ -142,8 +135,8 @@ export default function MapView({
       for (const place of placesRef.current.values()) ensurePoint(place);
     }
 
-    // Drop pins that clustered away or scrolled out of view, and bubbles that
-    // dissolved (zoom change) or left the padded viewport.
+    // Drop pins that clustered away and bubbles that dissolved (zoom change
+    // or index rebuild) — panning alone never changes either set.
     for (const [id, m] of pointMarkers.current) {
       if (!seenPoints.has(id)) { m.remove(); pointMarkers.current.delete(id); }
     }
