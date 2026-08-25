@@ -125,7 +125,8 @@ export default function MapApp() {
       );
     }
     const sorted = [...rows];
-    if (sort === "trending") sorted.sort((a, b) => buzzScore(b.vote_count, b.comment_count) - buzzScore(a.vote_count, a.comment_count));
+    if (sort === "trending") sorted.sort((a, b) =>
+      buzzScore(b.vote_count, b.comment_count, b.trending_score) - buzzScore(a.vote_count, a.comment_count, a.trending_score));
     if (sort === "newest") sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
     if (sort === "loved") sorted.sort((a, b) => b.vote_count - a.vote_count);
     return sorted;

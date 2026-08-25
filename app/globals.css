@@ -27,6 +27,7 @@ body {
 
 /* ── Trending pin glow ─────────────────────────────────────────────── */
 .pin {
+  position: relative; /* anchors the ::before sonar ring and ::after badge */
   width: 26px;
   height: 26px;
   border-radius: 50% 50% 50% 4px;
@@ -43,24 +44,57 @@ body {
   font-size: 12px;
   line-height: 1;
 }
-/* Five buzz levels — each pulses harder, glows wider, and grows a touch.
-   --glow is the halo colour (r,g,b) set inline per category tier. */
-.pin-l1 { animation: glow 2.8s ease-in-out infinite; --spread: 6px;  --peak: 0.40; }
-.pin-l2 { animation: glow 2.4s ease-in-out infinite; --spread: 9px;  --peak: 0.48; }
+/* Five buzz levels. --glow is the tier halo colour (r,g,b) set inline.
+   Each hot tier gets a STATIC colored ring (readable at a glance over a busy
+   basemap, and survives prefers-reduced-motion), l2+ add an expanding sonar
+   ripple, and l3/l4 grow and carry a ⚡/🔥 badge above the pin. */
+.pin-l1 { box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 3px rgba(var(--glow), 0.35); }
+.pin-l2 { box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 3px rgba(var(--glow), 0.55); }
 .pin-l3 {
   width: 30px; height: 30px;
-  animation: glow 1.9s ease-in-out infinite; --spread: 13px; --peak: 0.55;
+  box-shadow: 0 2px 7px rgba(0,0,0,0.3), 0 0 0 4px rgba(var(--glow), 0.65);
 }
 .pin-l3 span { font-size: 14px; }
 .pin-l4 {
   width: 34px; height: 34px;
-  animation: glow 1.5s ease-in-out infinite; --spread: 17px; --peak: 0.62;
+  box-shadow: 0 2px 7px rgba(0,0,0,0.3), 0 0 0 4px rgba(var(--glow), 0.8);
 }
 .pin-l4 span { font-size: 16px; }
 
-@keyframes glow {
-  0%, 100% { box-shadow: 0 2px 7px rgba(0,0,0,0.28), 0 0 0 0 rgba(var(--glow), var(--peak)); }
-  50%      { box-shadow: 0 2px 7px rgba(0,0,0,0.28), 0 0 0 var(--spread) rgba(var(--glow), 0); }
+/* Sonar ripple — a pin-shaped ring that expands and fades. Faster = hotter. */
+.pin-l2::before, .pin-l3::before, .pin-l4::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  border: 3px solid rgba(var(--glow), 0.9);
+  animation: sonar 2s ease-out infinite;
+  pointer-events: none;
+}
+.pin-l3::before { animation-duration: 1.5s; }
+.pin-l4::before { animation-duration: 1.1s; }
+
+@keyframes sonar {
+  0%       { transform: scale(0.9); opacity: 0.85; }
+  70%, 100% { transform: scale(2);   opacity: 0; }
+}
+
+/* Tier badge — counter-rotated so it sits upright above the tilted pin. */
+.pin-l3::after, .pin-l4::after {
+  position: absolute;
+  top: -13px;
+  right: -13px;
+  transform: rotate(45deg);
+  font-size: 12px;
+  line-height: 1;
+  filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.45));
+  pointer-events: none;
+}
+.pin-l3::after { content: "⚡"; }
+.pin-l4::after { content: "🔥"; font-size: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .pin-l2::before, .pin-l3::before, .pin-l4::before { animation: none; opacity: 0; }
 }
 
 @keyframes spin {

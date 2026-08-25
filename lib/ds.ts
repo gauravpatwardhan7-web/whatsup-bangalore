@@ -31,11 +31,14 @@ export const CATEGORIES: Record<Category, { label: string; emoji: string; color:
 
 // Live "buzz" — computed from the counts currently on screen, so the badge
 // and glow always match what the user sees (no stale server snapshot).
-// A comment weighs more than a vote (more effort). Server-side trending_score
-// (time-decayed, + external mentions) still drives the initial fetch order;
-// this drives the live visual tier and re-sort.
-export function buzzScore(voteCount: number, commentCount: number): number {
-  return voteCount + 1.5 * commentCount;
+// A comment weighs more than a vote (more effort). External signal (Reddit/
+// YouTube mentions) only lives in the server-side trending_score, so we take
+// the max of the live on-site score and the decayed server score: a place
+// buzzing on Reddit lights up even with zero on-site votes, and live votes
+// still register instantly. Max (not sum) because trending_score already
+// includes decayed votes/comments — summing would double-count them.
+export function buzzScore(voteCount: number, commentCount: number, trendingScore = 0): number {
+  return Math.max(voteCount + 1.5 * commentCount, trendingScore);
 }
 
 export interface BuzzTier {
@@ -64,8 +67,8 @@ export function buzzTier(score: number): BuzzTier {
   return BUZZ_TIERS.find((t) => score >= t.min)!;
 }
 
-export function placeTier(place: { vote_count: number; comment_count: number }): BuzzTier {
-  return buzzTier(buzzScore(place.vote_count, place.comment_count));
+export function placeTier(place: { vote_count: number; comment_count: number; trending_score?: number }): BuzzTier {
+  return buzzTier(buzzScore(place.vote_count, place.comment_count, place.trending_score ?? 0));
 }
 
 export const BLR_CENTER: [number, number] = [77.5946, 12.9716];
