@@ -61,40 +61,56 @@ body {
 }
 .pin-l4 span { font-size: 16px; }
 
-/* Sonar ripple — a pin-shaped ring that expands and fades. Faster = hotter. */
+/* Sonar ripple — a pin-shaped ring that expands and fades. Faster + wider =
+   hotter. The ring doubles as a filled flash at the start of each cycle so the
+   pulse reads even on a tiny pin over a busy basemap. */
 .pin-l2::before, .pin-l3::before, .pin-l4::before {
   content: "";
   position: absolute;
-  inset: -3px;
+  inset: -4px;
   border-radius: inherit;
-  border: 3px solid rgba(var(--glow), 0.9);
-  animation: sonar 2s ease-out infinite;
+  border: 5px solid rgba(var(--glow), 1);
+  background: rgba(var(--glow), 0.25);
+  animation: sonar 1.8s ease-out infinite;
   pointer-events: none;
 }
-.pin-l3::before { animation-duration: 1.5s; }
-.pin-l4::before { animation-duration: 1.1s; }
+.pin-l3::before { animation-duration: 1.4s; }
+.pin-l4::before { animation-duration: 1s; border-width: 6px; }
 
 @keyframes sonar {
-  0%       { transform: scale(0.9); opacity: 0.85; }
-  70%, 100% { transform: scale(2);   opacity: 0; }
+  0%       { transform: scale(0.85); opacity: 1; }
+  75%, 100% { transform: scale(2.9);  opacity: 0; }
 }
 
-/* Tier badge — counter-rotated so it sits upright above the tilted pin. */
+/* Tier badge — counter-rotated so it sits upright above the tilted pin.
+   The 🔥 bobs/flickers so "on fire" is unmissable. */
 .pin-l3::after, .pin-l4::after {
   position: absolute;
-  top: -13px;
-  right: -13px;
+  top: -15px;
+  right: -15px;
   transform: rotate(45deg);
-  font-size: 12px;
+  font-size: 14px;
   line-height: 1;
-  filter: drop-shadow(0 1px 1.5px rgba(0,0,0,0.45));
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55));
   pointer-events: none;
 }
 .pin-l3::after { content: "⚡"; }
-.pin-l4::after { content: "🔥"; font-size: 14px; }
+.pin-l4::after {
+  content: "🔥";
+  font-size: 19px;
+  top: -19px;
+  right: -19px;
+  animation: flame 0.9s ease-in-out infinite;
+}
+
+@keyframes flame {
+  0%, 100% { transform: rotate(45deg) scale(1); }
+  50%      { transform: rotate(45deg) scale(1.25) translateY(-1.5px); }
+}
 
 @media (prefers-reduced-motion: reduce) {
   .pin-l2::before, .pin-l3::before, .pin-l4::before { animation: none; opacity: 0; }
+  .pin-l4::after { animation: none; }
 }
 
 @keyframes spin {

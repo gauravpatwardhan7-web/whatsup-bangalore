@@ -24,10 +24,18 @@ export function formatEventWindow(start: string, end: string | null): string {
 }
 
 // An event is over once its end has passed (or its start, when it has no end).
-export function isPastEvent(p: { category: string; event_start: string | null; event_end: string | null }): boolean {
+// Ingested events (reddit/youtube) usually carry no dates at all — those go
+// stale this many days after creation, so an ended festival can't haunt the
+// map forever just because nobody knew its dates.
+const DATELESS_EVENT_TTL_DAYS = 14;
+
+export function isPastEvent(p: { category: string; event_start: string | null; event_end: string | null; created_at?: string }): boolean {
   if (p.category !== "event") return false;
   const cutoff = p.event_end ?? p.event_start;
-  if (!cutoff) return false;
+  if (!cutoff) {
+    if (!p.created_at) return false;
+    return Date.now() - new Date(p.created_at).getTime() > DATELESS_EVENT_TTL_DAYS * 86_400_000;
+  }
   return new Date(cutoff).getTime() < Date.now();
 }
 
