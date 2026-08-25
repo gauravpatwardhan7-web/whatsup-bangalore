@@ -23,6 +23,27 @@ export interface Candidate {
   category: string;
   reason: string;
   is_event: boolean;
+  // YYYY-MM-DD when the source text states the event's dates; null otherwise.
+  event_start?: string | null;
+  event_end?: string | null;
+}
+
+// Validate a model-supplied event date: strict YYYY-MM-DD and within a year of
+// now (a relative-date guess gone wrong lands far outside that). Returns null
+// on anything suspect — a missing date is always safer than a wrong one.
+export function cleanEventDate(s: string | null | undefined): string | null {
+  if (!s || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return null;
+  const t = new Date(`${s}T00:00:00Z`).getTime();
+  if (Number.isNaN(t) || Math.abs(t - Date.now()) > 365 * 86_400_000) return null;
+  return s;
+}
+
+// Clean both ends of an event range, swapping when the model reversed them.
+export function cleanEventRange(start?: string | null, end?: string | null): { event_start: string | null; event_end: string | null } {
+  let s = cleanEventDate(start);
+  let e = cleanEventDate(end);
+  if (s && e && e < s) [s, e] = [e, s];
+  return { event_start: s, event_end: e };
 }
 
 export function chunk<T>(arr: T[], size: number): T[][] {
@@ -69,9 +90,11 @@ const GEMINI_SCHEMA = {
           category: { type: Type.STRING, enum: CATEGORY_KEYS },
           reason: { type: Type.STRING },
           is_event: { type: Type.BOOLEAN },
+          event_start: { type: Type.STRING, nullable: true },
+          event_end: { type: Type.STRING, nullable: true },
         },
-        required: ["post_number", "name", "category", "reason", "is_event"],
-        propertyOrdering: ["post_number", "name", "category", "reason", "is_event"],
+        required: ["post_number", "name", "category", "reason", "is_event", "event_start", "event_end"],
+        propertyOrdering: ["post_number", "name", "category", "reason", "is_event", "event_start", "event_end"],
       },
     },
   },
@@ -94,8 +117,10 @@ const MISTRAL_SCHEMA = {
           category: { type: "string", enum: CATEGORY_KEYS },
           reason: { type: "string" },
           is_event: { type: "boolean" },
+          event_start: { type: ["string", "null"] },
+          event_end: { type: ["string", "null"] },
         },
-        required: ["post_number", "name", "category", "reason", "is_event"],
+        required: ["post_number", "name", "category", "reason", "is_event", "event_start", "event_end"],
         additionalProperties: false,
       },
     },

@@ -28,7 +28,7 @@ import ws from "ws"; // realtime transport: Node 20 lacks native WebSocket (unus
 import { CATEGORIES, type Category } from "../lib/ds";
 import { findNearbyMatch } from "../lib/guardrails";
 import { photoUrlFor } from "./ingest-reddit";
-import { chunk, extractCandidates, type Candidate } from "./llm-extract";
+import { chunk, cleanEventRange, extractCandidates, type Candidate } from "./llm-extract";
 import { geocodeInBlr, enrichNewPlace } from "./resolve-place";
 import { storePlacePhotos } from "./place-photos";
 
@@ -146,11 +146,13 @@ Do NOT extract: general city discussion, vlogs with no named venue, real-estate/
 
 For each kept place, choose the single best category from the allowed list, and set is_event=true only for time-bound events. post_number is the number shown before the video. Deduplicate within a video.
 
+When is_event=true, also fill event_start and event_end (YYYY-MM-DD) if the title/description states or clearly implies the event's dates — resolve relative phrases ("this weekend", "till Sunday") against the published date shown with each video; for a one-day event use the same date for both. Set them to null when the text doesn't say — never guess. For non-events both are always null.
+
 For "reason", write 2-3 informative sentences a local would find useful — what the place is, what it's known for, and why it's worth going (signature dishes, the vibe, what to order). Draw specifics from the video title/description; don't pad with generic filler. If detail is thin, keep it to what you can genuinely say.`;
 
 function buildPrompt(videos: Video[], baseIndex: number): string {
   const numbered = videos
-    .map((v, i) => `[${baseIndex + i}] ${v.title} (channel: ${v.channel})${v.description ? `\n${v.description}` : ""}`)
+    .map((v, i) => `[${baseIndex + i}] (published ${v.publishedAt.slice(0, 10)}) ${v.title} (channel: ${v.channel})${v.description ? `\n${v.description}` : ""}`)
     .join("\n\n");
   return `Videos:\n\n${numbered}`;
 }
@@ -259,6 +261,7 @@ async function main() {
           address: geo.address,
           image_url: photoUrlFor(category, cand.name),
           source_url: video.url,
+          ...(category === "event" ? cleanEventRange(cand.event_start, cand.event_end) : {}),
           rating: enrich?.rating ?? null,
           rating_count: enrich?.ratingCount ?? null,
           price_level: enrich?.priceLevel ?? null,

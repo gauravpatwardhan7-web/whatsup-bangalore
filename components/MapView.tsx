@@ -7,9 +7,10 @@ import { BLR_CENTER, CATEGORIES, placeTier } from "@/lib/ds";
 import type { Place } from "@/lib/types";
 
 // Only start clustering once the map has this many pins — below it, everything
-// shows individually. Buzzing/on-fire pins (tier >= this) never get clustered.
+// shows individually. Trending/buzzing/on-fire pins (tier >= this) never get
+// clustered — a glowing pin buried in a number bubble defeats the point.
 const CLUSTER_THRESHOLD = 75;
-const ALWAYS_SHOW_TIER = 3;
+const ALWAYS_SHOW_TIER = 2;
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 const MAP_STYLE = MAPTILER_KEY
@@ -38,8 +39,9 @@ export default function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   // Individual place pins, keyed by place id (kept stable across re-renders).
   const pointMarkers = useRef<Map<string, maplibregl.Marker>>(new Map());
-  // Cluster bubbles are transient — rebuilt on every render.
-  const clusterMarkers = useRef<maplibregl.Marker[]>([]);
+  // Cluster bubbles, keyed by "<zoom>:<cluster_id>" so a bubble that survives
+  // a pan is reused in place instead of flashing out and back in on move-end.
+  const clusterMarkers = useRef<Map<string, maplibregl.Marker>>(new Map());
   const indexRef = useRef<Supercluster<PointProps> | null>(null);
   const placesRef = useRef<Map<string, Place>>(new Map());
   const selectedIdRef = useRef(selectedId);
@@ -63,10 +65,8 @@ export default function MapView({
     if (!map) return;
     const index = indexRef.current; // null below the clustering threshold
 
-    for (const m of clusterMarkers.current) m.remove();
-    clusterMarkers.current = [];
-
     const seenPoints = new Set<string>();
+    const seenClusters = new Set<string>();
     // Create-or-restyle an individual pin for a place.
     const ensurePoint = (place: Place) => {
       seenPoints.add(place.id);
@@ -93,23 +93,40 @@ export default function MapView({
 
     if (index) {
       const b = map.getBounds();
+      // Query half a viewport beyond each edge so bubbles near the border
+      // already exist before they pan into view (no popping at the edges).
+      const padLng = (b.getEast() - b.getWest()) / 2;
+      const padLat = (b.getNorth() - b.getSouth()) / 2;
+      const zoom = Math.round(map.getZoom());
       const clusters = index.getClusters(
-        [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()],
-        Math.round(map.getZoom()),
+        [
+          Math.max(-180, b.getWest() - padLng),
+          Math.max(-90, b.getSouth() - padLat),
+          Math.min(180, b.getEast() + padLng),
+          Math.min(90, b.getNorth() + padLat),
+        ],
+        zoom,
       );
       for (const c of clusters) {
         const [lng, lat] = c.geometry.coordinates as [number, number];
         const props = c.properties as Supercluster.ClusterProperties | PointProps;
         if ("cluster" in props && props.cluster) {
           const clusterId = props.cluster_id;
-          const el = clusterElement(props.point_count);
-          el.addEventListener("click", () => {
-            const zoom = index.getClusterExpansionZoom(clusterId);
-            map.easeTo({ center: [lng, lat], zoom: Math.min(zoom, 18), duration: 500 });
-          });
-          clusterMarkers.current.push(
-            new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map),
-          );
+          // Same id at the same zoom = same position and count, so an existing
+          // bubble can be left exactly as it is.
+          const key = `${zoom}:${clusterId}`;
+          seenClusters.add(key);
+          if (!clusterMarkers.current.has(key)) {
+            const el = clusterElement(props.point_count);
+            el.addEventListener("click", () => {
+              const target = index.getClusterExpansionZoom(clusterId);
+              map.easeTo({ center: [lng, lat], zoom: Math.min(target, 18), duration: 500 });
+            });
+            clusterMarkers.current.set(
+              key,
+              new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map),
+            );
+          }
         } else {
           const place = placesRef.current.get((props as PointProps).placeId);
           if (place) ensurePoint(place);
@@ -125,9 +142,13 @@ export default function MapView({
       for (const place of placesRef.current.values()) ensurePoint(place);
     }
 
-    // Drop pins that clustered away or scrolled out of view.
+    // Drop pins that clustered away or scrolled out of view, and bubbles that
+    // dissolved (zoom change) or left the padded viewport.
     for (const [id, m] of pointMarkers.current) {
       if (!seenPoints.has(id)) { m.remove(); pointMarkers.current.delete(id); }
+    }
+    for (const [key, m] of clusterMarkers.current) {
+      if (!seenClusters.has(key)) { m.remove(); clusterMarkers.current.delete(key); }
     }
   }, []);
 
@@ -171,6 +192,10 @@ export default function MapView({
   // Rebuild the cluster index whenever the (filtered) places change.
   useEffect(() => {
     placesRef.current = new Map(places.map((p) => [p.id, p]));
+    // A fresh index reuses cluster ids for different groupings — stale bubbles
+    // keyed on old ids would be wrong, so start clean.
+    for (const m of clusterMarkers.current.values()) m.remove();
+    clusterMarkers.current.clear();
     // Clustering only kicks in once the map gets busy. Below the threshold every
     // pin stands on its own; a null index tells render() to skip clustering.
     if (places.length < CLUSTER_THRESHOLD) {
