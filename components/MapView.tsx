@@ -2,19 +2,37 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
-import Supercluster from "supercluster";
-import { BLR_CENTER, CATEGORIES, placeTier } from "@/lib/ds";
+import { BLR_CENTER, CATEGORIES, buzzScore, placeTier } from "@/lib/ds";
 import { thumbUrl } from "@/lib/image";
+import type { Category } from "@/lib/ds";
 import type { Place } from "@/lib/types";
 
-// Clustering is currently OFF: MapApp caps the map at 100 places, which is
-// sparse enough to show every pin individually — and number bubbles hid the
-// photos that make pins tell places apart. The clustering path below stays
-// intact; drop this below that cap to switch it back on.
-const CLUSTER_THRESHOLD = 250;
-// If clustering does come back, these tiers stay out of it — a glowing pin
-// buried in a number bubble defeats the point.
+// Density is handled the way Airbnb handles listings: draw the best pins that
+// fit, and drop any that would land on top of one already drawn. Nothing is
+// capped or rolled into a number bubble — zoom in and the pixels between
+// places grow, so the ones that were crowded out appear on their own.
+//
+// The gap is measured in world pixels, which depend on zoom but not on where
+// the map is panned. So the visible set changes only when you zoom: panning
+// never adds, removes, or reshuffles a marker.
+const MIN_PIN_GAP_PX = 52;
+// Past this zoom nothing is thinned at all. Without it, places within ~30 m of
+// each other (two spots in one block) would collide however far you zoomed in,
+// so a handful could never be reached from the map.
+const NO_THIN_ZOOM = 16;
+// Buzzing and hotter always get drawn — a trending pin must never be the one
+// that loses its spot.
 const ALWAYS_SHOW_TIER = 2;
+
+// This is a Bengaluru map, so it stays over Bengaluru: you can't pan off to
+// another country or zoom out to the subcontinent. The box comfortably clears
+// every place we hold, including the out-of-town ones (Nandi Hills to the
+// north, Wonderla to the south-west). In practice the box is what stops the
+// zoom-out — MapLibre won't let the viewport grow past it, which lands around
+// zoom 11 with the whole metro on screen — and MIN_ZOOM is the backstop if
+// these bounds are ever widened.
+const CITY_BOUNDS: [[number, number], [number, number]] = [[77.25, 12.60], [78.00, 13.55]];
+const MIN_ZOOM = 10;
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
 const MAP_STYLE = MAPTILER_KEY
@@ -37,7 +55,75 @@ interface Props {
   onPickedPinMove?: (point: { lat: number; lng: number }) => void;
 }
 
-type PointProps = { placeId: string };
+// Web Mercator position in world pixels at a given zoom. Only the *difference*
+// between two of these matters here, and that difference is the same wherever
+// the map happens to be panned — which is what keeps pins from reshuffling
+// under a drag.
+export function worldPixel(lat: number, lng: number, zoom: number): { x: number; y: number } {
+  const size = 512 * Math.pow(2, zoom);
+  const s = Math.sin((lat * Math.PI) / 180);
+  return {
+    x: ((lng + 180) / 360) * size,
+    y: (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * size,
+  };
+}
+
+// Who wins the space when pins would overlap: whatever's open, then anything
+// buzzing, then the rest round-robin across categories so one crowded
+// category (food is ~2/3 of the data) can't take every remaining spot.
+function pinPriority(places: Place[], selectedId: string | null): Place[] {
+  const heat = (p: Place) => buzzScore(p.vote_count, p.comment_count, p.trending_score);
+  const byHeat = (a: Place, b: Place) => heat(b) - heat(a);
+  const open: Place[] = [];
+  const hot: Place[] = [];
+  const rest: Place[] = [];
+  for (const p of places) {
+    if (p.id === selectedId) open.push(p);
+    else if (placeTier(p).level >= ALWAYS_SHOW_TIER) hot.push(p);
+    else rest.push(p);
+  }
+  hot.sort(byHeat);
+  rest.sort(byHeat);
+
+  const queues = new Map<Category, Place[]>();
+  for (const p of rest) {
+    const q = queues.get(p.category);
+    if (q) q.push(p);
+    else queues.set(p.category, [p]);
+  }
+  const lists = [...queues.values()];
+  const cursors = lists.map(() => 0);
+  const mixed: Place[] = [];
+  let progressed = true;
+  while (progressed) {
+    progressed = false;
+    for (let i = 0; i < lists.length; i++) {
+      const next = lists[i][cursors[i]];
+      if (!next) continue;
+      cursors[i]++;
+      mixed.push(next);
+      progressed = true;
+    }
+  }
+  return [...open, ...hot, ...mixed];
+}
+
+// The pins that fit at this zoom without colliding, best first.
+export function pinsThatFit(places: Place[], zoom: number, selectedId: string | null): Place[] {
+  if (zoom >= NO_THIN_ZOOM) return places;
+  const gapSq = MIN_PIN_GAP_PX * MIN_PIN_GAP_PX;
+  const taken: { x: number; y: number }[] = [];
+  const shown: Place[] = [];
+  for (const place of pinPriority(places, selectedId)) {
+    const { x, y } = worldPixel(place.lat, place.lng, zoom);
+    const clash = taken.some((t) => (t.x - x) ** 2 + (t.y - y) ** 2 < gapSq);
+    // The open pin and hot spots are drawn even if they'd overlap.
+    if (clash && place.id !== selectedId && placeTier(place).level < ALWAYS_SHOW_TIER) continue;
+    taken.push({ x, y });
+    shown.push(place);
+  }
+  return shown;
+}
 
 export default function MapView({
   places, selectedId, focusKey, onSelect, onCenterChange, onMapClick, picking, pickedPin, onPickedPinMove,
@@ -46,11 +132,11 @@ export default function MapView({
   const mapRef = useRef<maplibregl.Map | null>(null);
   // Individual place pins, keyed by place id (kept stable across re-renders).
   const pointMarkers = useRef<Map<string, maplibregl.Marker>>(new Map());
-  // Cluster bubbles, keyed by "<zoom>:<cluster_id>" so a bubble that survives
-  // a pan is reused in place instead of flashing out and back in on move-end.
-  const clusterMarkers = useRef<Map<string, maplibregl.Marker>>(new Map());
-  const indexRef = useRef<Supercluster<PointProps> | null>(null);
   const placesRef = useRef<Map<string, Place>>(new Map());
+  // What the last render was computed from. Panning doesn't change any of it,
+  // so a pan short-circuits before touching a single marker.
+  const renderKeyRef = useRef("");
+  const placesVersionRef = useRef(0);
   const selectedIdRef = useRef(selectedId);
   const pickedMarkerRef = useRef<maplibregl.Marker | null>(null);
 
@@ -65,15 +151,18 @@ export default function MapView({
     onPickedPinMoveRef.current = onPickedPinMove;
   });
 
-  // Recompute clusters for the current viewport + zoom and sync DOM markers.
+  // Work out which pins fit at this zoom and sync the DOM markers to match.
   // Reads everything from refs so it's stable (safe to call from map events).
-  const render = useCallback(() => {
+  const render = useCallback((force = false) => {
     const map = mapRef.current;
     if (!map) return;
-    const index = indexRef.current; // null below the clustering threshold
+    // Round the zoom so the tail end of an ease doesn't re-thin repeatedly.
+    const zoom = Math.round(map.getZoom() * 4) / 4;
+    const key = `${zoom}|${placesVersionRef.current}|${selectedIdRef.current ?? ""}`;
+    if (!force && key === renderKeyRef.current) return; // a pan lands here
+    renderKeyRef.current = key;
 
     const seenPoints = new Set<string>();
-    const seenClusters = new Set<string>();
     // Create-or-restyle an individual pin for a place.
     const ensurePoint = (place: Place) => {
       seenPoints.add(place.id);
@@ -98,57 +187,13 @@ export default function MapView({
       );
     };
 
-    if (index) {
-      // Cluster over the whole world, not just the viewport. With a few
-      // hundred pins the marker count is tiny, and when every bubble/pin
-      // exists up front, panning never adds, removes, or moves a single
-      // marker — they're geo-anchored and just glide with the map. Bubbles
-      // only regroup on zoom, where regrouping is what the user expects.
-      // (Revisit if the map ever grows to thousands of places.)
-      const zoom = Math.round(map.getZoom());
-      const clusters = index.getClusters([-180, -90, 180, 90], zoom);
-      for (const c of clusters) {
-        const [lng, lat] = c.geometry.coordinates as [number, number];
-        const props = c.properties as Supercluster.ClusterProperties | PointProps;
-        if ("cluster" in props && props.cluster) {
-          const clusterId = props.cluster_id;
-          // Same id at the same zoom = same position and count, so an existing
-          // bubble can be left exactly as it is.
-          const key = `${zoom}:${clusterId}`;
-          seenClusters.add(key);
-          if (!clusterMarkers.current.has(key)) {
-            const el = clusterElement(props.point_count);
-            el.addEventListener("click", () => {
-              const target = index.getClusterExpansionZoom(clusterId);
-              map.easeTo({ center: [lng, lat], zoom: Math.min(target, 18), duration: 500 });
-            });
-            clusterMarkers.current.set(
-              key,
-              new maplibregl.Marker({ element: el, anchor: "center" }).setLngLat([lng, lat]).addTo(map),
-            );
-          }
-        } else {
-          const place = placesRef.current.get((props as PointProps).placeId);
-          if (place) ensurePoint(place);
-        }
-      }
-      // Hot spots (buzzing / on fire) and the open one are never buried in a
-      // cluster — they're excluded from the index and always drawn individually.
-      for (const place of placesRef.current.values()) {
-        if (placeTier(place).level >= ALWAYS_SHOW_TIER || place.id === selectedIdRef.current) ensurePoint(place);
-      }
-    } else {
-      // Below the threshold: no clustering, every place is its own pin.
-      for (const place of placesRef.current.values()) ensurePoint(place);
+    for (const place of pinsThatFit([...placesRef.current.values()], zoom, selectedIdRef.current)) {
+      ensurePoint(place);
     }
 
-    // Drop pins that clustered away and bubbles that dissolved (zoom change
-    // or index rebuild) — panning alone never changes either set.
+    // Drop pins that lost their spot at this zoom, or left the filtered set.
     for (const [id, m] of pointMarkers.current) {
       if (!seenPoints.has(id)) { m.remove(); pointMarkers.current.delete(id); }
-    }
-    for (const [key, m] of clusterMarkers.current) {
-      if (!seenClusters.has(key)) { m.remove(); clusterMarkers.current.delete(key); }
     }
   }, []);
 
@@ -159,6 +204,8 @@ export default function MapView({
       style: MAP_STYLE,
       center: BLR_CENTER,
       zoom: 12,
+      minZoom: MIN_ZOOM,
+      maxBounds: CITY_BOUNDS,
       attributionControl: { compact: true },
     });
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "bottom-right");
@@ -173,12 +220,14 @@ export default function MapView({
     map.on("moveend", () => {
       const c = map.getCenter();
       onCenterChangeRef.current?.({ lat: c.lat, lng: c.lng });
-      render(); // re-cluster after the pan/zoom settles (no flicker mid-gesture)
+      // Re-thin once the gesture settles (no flicker mid-drag). A pan leaves
+      // the render key untouched, so this is a no-op unless the zoom changed.
+      render();
     });
     map.on("click", (e) => {
       onMapClickRef.current?.({ lat: e.lngLat.lat, lng: e.lngLat.lng });
     });
-    map.on("load", render);
+    map.on("load", () => render());
     mapRef.current = map;
     const ro = new ResizeObserver(() => map.resize());
     ro.observe(containerRef.current);
@@ -190,37 +239,16 @@ export default function MapView({
   }, [render]);
 
   // Rebuild the cluster index whenever the (filtered) places change.
+  // Re-thin whenever the (filtered) places change — a new set can free up or
+  // claim spots, so this one is forced past the render-key short-circuit.
   useEffect(() => {
     placesRef.current = new Map(places.map((p) => [p.id, p]));
-    // A fresh index reuses cluster ids for different groupings — stale bubbles
-    // keyed on old ids would be wrong, so start clean.
-    for (const m of clusterMarkers.current.values()) m.remove();
-    clusterMarkers.current.clear();
-    // Clustering only kicks in once the map gets busy. Below the threshold every
-    // pin stands on its own; a null index tells render() to skip clustering.
-    if (places.length < CLUSTER_THRESHOLD) {
-      indexRef.current = null;
-      render();
-      return;
-    }
-    // Only cluster the quieter pins — buzzing / on-fire spots stay individual so
-    // they're never hidden. minPoints:4 + small radius keeps clustering gentle
-    // (lone pairs stay separate), and by ~zoom 14 everything is loose.
-    const clusterable = places.filter((p) => placeTier(p).level < ALWAYS_SHOW_TIER);
-    const index = new Supercluster<PointProps>({ radius: 30, maxZoom: 14, minPoints: 4 });
-    index.load(
-      clusterable.map((p) => ({
-        type: "Feature" as const,
-        properties: { placeId: p.id },
-        geometry: { type: "Point" as const, coordinates: [p.lng, p.lat] },
-      })),
-    );
-    indexRef.current = index;
-    render();
+    placesVersionRef.current++;
+    render(true);
   }, [places, render]);
 
   // Zoom to whatever's on screen when the focus key changes (area filter).
-  // Declared after the index effect above so placesRef is already current.
+  // Declared after the places effect above so placesRef is already current.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !focusKey) return;
@@ -284,17 +312,6 @@ export default function MapView({
   }, [picking]);
 
   return <div ref={containerRef} style={{ position: "absolute", inset: 0 }} />;
-}
-
-function clusterElement(count: number): HTMLElement {
-  // Bigger bubbles for denser clusters.
-  const size = count < 10 ? 34 : count < 50 ? 42 : 52;
-  const el = document.createElement("div");
-  el.className = "cluster-pin";
-  el.style.width = `${size}px`;
-  el.style.height = `${size}px`;
-  el.textContent = count >= 1000 ? `${Math.round(count / 100) / 10}k` : String(count);
-  return el;
 }
 
 function styleMarker(inner: HTMLElement, place: Place, selected: boolean) {
