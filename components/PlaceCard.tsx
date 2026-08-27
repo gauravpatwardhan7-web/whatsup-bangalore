@@ -2,6 +2,7 @@
 
 import { CARD_SHADOW, CATEGORIES, DS, placeTier } from "@/lib/ds";
 import { formatEventWindow } from "@/lib/format";
+import { areaOf } from "@/lib/areas";
 import type { Place } from "@/lib/types";
 
 interface Props {
@@ -22,6 +23,9 @@ function rankStyle(rank: number): { bg: string; color: string } {
 export default function PlaceCard({ place, rank, selected, onClick }: Props) {
   const cat = CATEGORIES[place.category];
   const tier = placeTier(place);
+  // The area column is null on most rows, so fall back to the one derived
+  // from coordinates — the same one the area filter uses.
+  const areaLabel = place.area ?? areaOf(place);
   return (
     <button
       onClick={onClick}
@@ -66,7 +70,7 @@ export default function PlaceCard({ place, rank, selected, onClick }: Props) {
             )}
           </div>
           <div style={{ fontSize: 12.5, color: DS.textSub, marginTop: 4, marginLeft: 26 }}>
-            {cat.label}{place.area ? ` · ${place.area}` : ""}
+            {cat.label}{areaLabel ? ` · ${areaLabel}` : ""}
             {place.event_start && (
               <span style={{ color: "#dc2626", fontWeight: 600 }}>
                 {" "}· {formatEventWindow(place.event_start, place.event_end)}

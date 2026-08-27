@@ -6,6 +6,7 @@ import { BLR_CENTER, CATEGORIES, DS, FLOAT_SHADOW, buzzScore, type Category } fr
 import { countPendingPlaces, fetchPlaces, fetchPlaceStats, getSessionUser, signInWithGoogle, signOut, subscribeToActivity } from "@/lib/data";
 import { MOCK_MODE } from "@/lib/supabase/client";
 import { isThisWeekend } from "@/lib/format";
+import { areaOf } from "@/lib/areas";
 import type { Place, SessionUser, SortMode } from "@/lib/types";
 import MapView from "./MapView";
 import PlaceCard from "./PlaceCard";
@@ -80,6 +81,9 @@ export default function MapApp() {
   const [listOpen, setListOpen] = useState(true);
   const [sort, setSort] = useState<SortMode>("trending");
   const [activeCats, setActiveCats] = useState<Set<Category>>(new Set());
+  // Single-select on purpose: the point of areas is to look at one part of
+  // town at a time.
+  const [activeArea, setActiveArea] = useState<string | null>(null);
   const [weekendOnly, setWeekendOnly] = useState(false);
   const [query, setQuery] = useState("");
   // Pin-drop mode: the submit sheet hides while the user taps the map to place the pin.
@@ -145,7 +149,17 @@ export default function MapApp() {
     return () => clearTimeout(t);
   }, [toast]);
 
-  const filtered = useMemo(() => {
+  // Derived once per data load, so the filter path below doesn't recompute it
+  // on every keystroke.
+  const areaById = useMemo(() => {
+    const m = new Map<string, string | null>();
+    for (const p of places) m.set(p.id, areaOf(p));
+    return m;
+  }, [places]);
+
+  // Everything except the area filter. Shared, so the area chips can count
+  // what picking each one would actually give you under the other filters.
+  const preAreaRows = useMemo(() => {
     let rows = places;
     if (activeCats.size > 0) rows = rows.filter((p) => activeCats.has(p.category));
     if (weekendOnly) rows = rows.filter((p) => isThisWeekend(p.event_start));
@@ -154,9 +168,33 @@ export default function MapApp() {
       rows = rows.filter((p) =>
         p.title.toLowerCase().includes(q) ||
         (p.area ?? "").toLowerCase().includes(q) ||
+        (areaById.get(p.id) ?? "").toLowerCase().includes(q) ||
         (p.description ?? "").toLowerCase().includes(q)
       );
     }
+    return rows;
+  }, [places, areaById, activeCats, weekendOnly, query]);
+
+  // Areas that actually have something, busiest first.
+  const areaOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of preAreaRows) {
+      const a = areaById.get(p.id);
+      if (a) counts.set(a, (counts.get(a) ?? 0) + 1);
+    }
+    return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  }, [preAreaRows, areaById]);
+
+  // A category or search change can empty the chosen area. Derive whether it
+  // still applies instead of resetting the state in an effect, so there's
+  // never a frame showing an empty map under a filter that no longer holds.
+  const effectiveArea =
+    activeArea && areaOptions.some(([name]) => name === activeArea) ? activeArea : null;
+
+  const filtered = useMemo(() => {
+    const rows = effectiveArea
+      ? preAreaRows.filter((p) => areaById.get(p.id) === effectiveArea)
+      : preAreaRows;
     const sorted = [...rows];
     if (sort === "trending") sorted.sort((a, b) =>
       buzzScore(b.vote_count, b.comment_count, b.trending_score) - buzzScore(a.vote_count, a.comment_count, a.trending_score));
@@ -165,7 +203,7 @@ export default function MapApp() {
     // Cap after sorting/filtering, so a category filter still draws its top
     // 100 from the whole dataset rather than from a pre-trimmed pool.
     return capByCategory(sorted, MAX_VISIBLE);
-  }, [places, activeCats, weekendOnly, query, sort]);
+  }, [preAreaRows, areaById, effectiveArea, sort]);
 
   // "Trending" and "Most loved" are rankings → show a numbered Top 10.
   // "Newest" is a feed → show it all, unranked.
@@ -178,9 +216,11 @@ export default function MapApp() {
     : isRanked
       ? `Top ${Math.min(TOP_N, filtered.length)} ${sort === "loved" ? "loved" : "trending"}` +
         `${soleCat ? " " + CATEGORIES[soleCat].label.toLowerCase() : ""}` +
+        `${effectiveArea ? " in " + effectiveArea : ""}` +
         `${weekendOnly ? " this weekend" : ""}`
       : `${filtered.length} spot${filtered.length === 1 ? "" : "s"}` +
         `${soleCat ? " · " + CATEGORIES[soleCat].label.toLowerCase() : ""}` +
+        `${effectiveArea ? " · " + effectiveArea : ""}` +
         `${weekendOnly ? " this weekend" : " popping up"}`;
 
   const selected = filtered.find((p) => p.id === selectedId)
@@ -222,6 +262,7 @@ export default function MapApp() {
     <div style={{ position: "relative", height: "100dvh", overflow: "hidden", background: DS.bg }}>
       <MapView
         places={filtered}
+        focusKey={effectiveArea}
         selectedId={selectedId}
         onSelect={(p) => setSelectedId(p.id)}
         onCenterChange={(c) => { mapCenterRef.current = c; }}
@@ -340,9 +381,35 @@ export default function MapApp() {
         )}
       </div>
 
+      {/* ── area filter: people pick a part of town before they pick a place ── */}
+      {areaOptions.length > 1 && (
+        <div style={{
+          position: "absolute", top: 62, left: 12, right: 12, zIndex: 46,
+          display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4,
+          scrollbarWidth: "none",
+        }}>
+          <button
+            onClick={() => setActiveArea(null)}
+            style={chipStyle(effectiveArea === null, DS.text, "#f1f0ee")}
+          >
+            🗺 All areas
+          </button>
+          {areaOptions.map(([name, count]) => (
+            <button
+              key={name}
+              onClick={() => setActiveArea((a) => (a === name ? null : name))}
+              style={chipStyle(effectiveArea === name, DS.accent, "#eef2fb")}
+            >
+              {name}
+              <span style={{ opacity: 0.55, marginLeft: 5 }}>{count}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ── filter chips ── */}
       <div style={{
-        position: "absolute", top: 62, left: 12, right: 12, zIndex: 45,
+        position: "absolute", top: areaOptions.length > 1 ? 104 : 62, left: 12, right: 12, zIndex: 45,
         display: "flex", gap: 6, overflowX: "auto", paddingBottom: 4,
         scrollbarWidth: "none",
       }}>
@@ -366,7 +433,7 @@ export default function MapApp() {
           position: "absolute", zIndex: 30,
           ...(isMobile
             ? { left: 8, right: 8, bottom: 8, maxHeight: listOpen ? "64dvh" : 56 }
-            : { top: 108, left: 12, width: 360, bottom: 16 }),
+            : { top: areaOptions.length > 1 ? 150 : 108, left: 12, width: 360, bottom: 16 }),
           background: "rgba(255,255,255,0.97)", backdropFilter: "blur(8px)",
           borderRadius: 10, boxShadow: FLOAT_SHADOW, border: `1px solid ${DS.border}`,
           display: "flex", flexDirection: "column", overflow: "hidden",

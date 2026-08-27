@@ -24,6 +24,9 @@ const MAP_STYLE = MAPTILER_KEY
 interface Props {
   places: Place[];
   selectedId: string | null;
+  // When this changes to a non-null value, the map fits to the places
+  // currently shown — how the area filter zooms into one part of town.
+  focusKey?: string | null;
   onSelect: (place: Place) => void;
   onCenterChange?: (center: { lat: number; lng: number }) => void;
   onMapClick?: (point: { lat: number; lng: number }) => void;
@@ -37,7 +40,7 @@ interface Props {
 type PointProps = { placeId: string };
 
 export default function MapView({
-  places, selectedId, onSelect, onCenterChange, onMapClick, picking, pickedPin, onPickedPinMove,
+  places, selectedId, focusKey, onSelect, onCenterChange, onMapClick, picking, pickedPin, onPickedPinMove,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
@@ -216,6 +219,24 @@ export default function MapView({
     render();
   }, [places, render]);
 
+  // Zoom to whatever's on screen when the focus key changes (area filter).
+  // Declared after the index effect above so placesRef is already current.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusKey) return;
+    const pts = [...placesRef.current.values()];
+    if (!pts.length) return;
+    const bounds = new maplibregl.LngLatBounds();
+    for (const p of pts) bounds.extend([p.lng, p.lat]);
+    // Keep the fitted area clear of the desktop list panel and the filter rows.
+    const wide = map.getContainer().clientWidth >= 768;
+    map.fitBounds(bounds, {
+      padding: { top: 160, bottom: wide ? 40 : 90, left: wide ? 400 : 40, right: 40 },
+      maxZoom: 15.5,
+      duration: 700,
+    });
+  }, [focusKey]);
+
   // Restyle selected pin + fly to it.
   useEffect(() => {
     selectedIdRef.current = selectedId;
@@ -281,7 +302,7 @@ function styleMarker(inner: HTMLElement, place: Place, selected: boolean) {
   const tier = placeTier(place);
   // 96px covers the largest pin (42px) on a 2x screen with room to spare.
   const thumb = thumbUrl(place.image_url, 96);
-  inner.className = `pin${tier.pinClass ? " " + tier.pinClass : ""}`;
+  inner.className = `pin${tier.pinClass ? " " + tier.pinClass : ""}${selected ? " pin-sel" : ""}`;
   inner.style.setProperty("--cat", cat.color);
   inner.style.setProperty("--glow", tier.pinColor || "0,0,0");
   inner.style.backgroundImage = thumb ? `url("${encodeURI(thumb)}")` : "";
