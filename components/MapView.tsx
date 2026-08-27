@@ -4,12 +4,16 @@ import { useCallback, useEffect, useRef } from "react";
 import maplibregl from "maplibre-gl";
 import Supercluster from "supercluster";
 import { BLR_CENTER, CATEGORIES, placeTier } from "@/lib/ds";
+import { thumbUrl } from "@/lib/image";
 import type { Place } from "@/lib/types";
 
-// Only start clustering once the map has this many pins — below it, everything
-// shows individually. Trending/buzzing/on-fire pins (tier >= this) never get
-// clustered — a glowing pin buried in a number bubble defeats the point.
-const CLUSTER_THRESHOLD = 75;
+// Clustering is currently OFF: MapApp caps the map at 100 places, which is
+// sparse enough to show every pin individually — and number bubbles hid the
+// photos that make pins tell places apart. The clustering path below stays
+// intact; drop this below that cap to switch it back on.
+const CLUSTER_THRESHOLD = 250;
+// If clustering does come back, these tiers stay out of it — a glowing pin
+// buried in a number bubble defeats the point.
 const ALWAYS_SHOW_TIER = 2;
 
 const MAPTILER_KEY = process.env.NEXT_PUBLIC_MAPTILER_KEY;
@@ -275,11 +279,18 @@ function clusterElement(count: number): HTMLElement {
 function styleMarker(inner: HTMLElement, place: Place, selected: boolean) {
   const cat = CATEGORIES[place.category];
   const tier = placeTier(place);
+  // 96px covers the largest pin (42px) on a 2x screen with room to spare.
+  const thumb = thumbUrl(place.image_url, 96);
   inner.className = `pin${tier.pinClass ? " " + tier.pinClass : ""}`;
-  inner.style.background = cat.color;
+  inner.style.setProperty("--cat", cat.color);
   inner.style.setProperty("--glow", tier.pinColor || "0,0,0");
+  inner.style.backgroundImage = thumb ? `url("${encodeURI(thumb)}")` : "";
   inner.style.outline = selected ? `3px solid ${cat.color}55` : "none";
-  inner.innerHTML = `<span>${cat.emoji}</span>`;
+  // With a photo the emoji shrinks to a corner badge; without one it stays
+  // centred as the pin's whole identity.
+  inner.innerHTML =
+    `<span class="${thumb ? "pin-cat" : "pin-emoji"}">${cat.emoji}</span>` +
+    (tier.level >= 3 ? `<b class="pin-tier">${tier.badgeEmoji}</b>` : "");
   inner.title = place.title;
   const outer = inner.parentElement;
   if (outer) outer.style.zIndex = String(selected ? 30 : 5 + tier.level * 3);

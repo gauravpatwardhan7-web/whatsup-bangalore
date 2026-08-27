@@ -25,41 +25,80 @@ body {
   overscroll-behavior-y: none;
 }
 
-/* ── Trending pin glow ─────────────────────────────────────────────── */
+/* ── Place pins ────────────────────────────────────────────────────────
+   A pin is a round photo of the place (Google photo we already store) with a
+   category-coloured ring and pointer, so every pin is recognisable as a
+   specific place rather than one more identical teardrop. --cat is the
+   category colour, --glow the buzz-tier halo (r,g,b); both set inline. */
 .pin {
-  position: relative; /* anchors the ::before sonar ring and ::after badge */
-  width: 26px;
-  height: 26px;
-  border-radius: 50% 50% 50% 4px;
-  transform: rotate(-45deg);
+  position: relative; /* anchors the sonar ring, pointer, and badges */
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   border: 2.5px solid #ffffff;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+  background-color: var(--cat);   /* shows through if the photo can't load */
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+  box-shadow: 0 0 0 2px var(--cat), 0 2px 6px rgba(0, 0, 0, 0.3);
+  margin-bottom: 8px;             /* room for the pointer; marker anchors bottom */
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
 }
-.pin span {
-  transform: rotate(45deg);
-  font-size: 12px;
+
+/* Pointer tail, so a round pin still marks an exact spot. */
+.pin::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 9px solid var(--cat);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.3));
+  pointer-events: none;
+}
+
+/* Photoless places (or a failed load) keep the old look: category colour with
+   the emoji centred, big enough to read. */
+.pin-emoji { font-size: 15px; line-height: 1; }
+
+/* Category badge on photo pins — the photo says which place, this says what
+   kind, since the ring colours alone are too close to tell apart. */
+.pin-cat {
+  position: absolute;
+  right: -5px;
+  bottom: -4px;
+  width: 17px;
+  height: 17px;
+  border-radius: 50%;
+  background: #ffffff;
+  border: 1.5px solid var(--cat);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
   line-height: 1;
 }
-/* Five buzz levels. --glow is the tier halo colour (r,g,b) set inline.
-   Each hot tier gets a STATIC colored ring (readable at a glance over a busy
-   basemap, and survives prefers-reduced-motion), l2+ add an expanding sonar
-   ripple, and l3/l4 grow and carry a ⚡/🔥 badge above the pin. */
-.pin-l1 { box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 3px rgba(var(--glow), 0.35); }
-.pin-l2 { box-shadow: 0 2px 6px rgba(0,0,0,0.25), 0 0 0 3px rgba(var(--glow), 0.55); }
+
+/* Buzz tiers: a static heat ring outside the category ring (readable at rest
+   and under prefers-reduced-motion), growing with the tier. */
+.pin-l1 { box-shadow: 0 0 0 2px var(--cat), 0 0 0 5px rgba(var(--glow), 0.45), 0 2px 6px rgba(0,0,0,0.3); }
+.pin-l2 { box-shadow: 0 0 0 2px var(--cat), 0 0 0 5px rgba(var(--glow), 0.7),  0 2px 6px rgba(0,0,0,0.3); }
 .pin-l3 {
-  width: 30px; height: 30px;
-  box-shadow: 0 2px 7px rgba(0,0,0,0.3), 0 0 0 4px rgba(var(--glow), 0.65);
+  width: 38px; height: 38px;
+  box-shadow: 0 0 0 2px var(--cat), 0 0 0 6px rgba(var(--glow), 0.8), 0 2px 7px rgba(0,0,0,0.32);
 }
-.pin-l3 span { font-size: 14px; }
 .pin-l4 {
-  width: 34px; height: 34px;
-  box-shadow: 0 2px 7px rgba(0,0,0,0.3), 0 0 0 4px rgba(var(--glow), 0.8);
+  width: 42px; height: 42px;
+  box-shadow: 0 0 0 2px var(--cat), 0 0 0 6px rgba(var(--glow), 0.92), 0 2px 7px rgba(0,0,0,0.32);
 }
-.pin-l4 span { font-size: 16px; }
+.pin-l3 .pin-emoji { font-size: 17px; }
+.pin-l4 .pin-emoji { font-size: 19px; }
 
 /* Sonar ripple — a pin-shaped ring that expands and fades. Faster + wider =
    hotter. The ring doubles as a filled flash at the start of each cycle so the
@@ -82,35 +121,33 @@ body {
   75%, 100% { transform: scale(2.9);  opacity: 0; }
 }
 
-/* Tier badge — counter-rotated so it sits upright above the tilted pin.
-   The 🔥 bobs/flickers so "on fire" is unmissable. */
-.pin-l3::after, .pin-l4::after {
+/* Tier badge (⚡/🔥) — its own element now that ::after draws the pointer.
+   Sits opposite the category badge so the two never collide; the 🔥 bobs so
+   "on fire" is unmissable. */
+.pin-tier {
   position: absolute;
-  top: -15px;
-  right: -15px;
-  transform: rotate(45deg);
-  font-size: 14px;
+  top: -13px;
+  left: -11px;
+  font-size: 15px;
   line-height: 1;
   filter: drop-shadow(0 1px 2px rgba(0,0,0,0.55));
   pointer-events: none;
 }
-.pin-l3::after { content: "⚡"; }
-.pin-l4::after {
-  content: "🔥";
+.pin-l4 .pin-tier {
   font-size: 19px;
-  top: -19px;
-  right: -19px;
+  top: -16px;
+  left: -14px;
   animation: flame 0.9s ease-in-out infinite;
 }
 
 @keyframes flame {
-  0%, 100% { transform: rotate(45deg) scale(1); }
-  50%      { transform: rotate(45deg) scale(1.25) translateY(-1.5px); }
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.25) translateY(-1.5px); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pin-l2::before, .pin-l3::before, .pin-l4::before { animation: none; opacity: 0; }
-  .pin-l4::after { animation: none; }
+  .pin-l4 .pin-tier { animation: none; }
 }
 
 @keyframes spin {

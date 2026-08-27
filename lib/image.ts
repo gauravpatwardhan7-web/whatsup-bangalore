@@ -9,6 +9,18 @@ const MAX_DIM = 1920;
 const MAX_BYTES = 5 * 1024 * 1024;
 const QUALITY_STEPS = [0.82, 0.7, 0.55, 0.4];
 
+// Square thumbnail URL for a stored place photo, via Supabase Storage's
+// on-the-fly render endpoint: a 96px pin thumb is ~3 KB against ~180 KB for
+// the stored original, which is what makes photo pins affordable across a
+// mapful of markers. URLs we don't serve ourselves pass through untouched.
+export function thumbUrl(url: string | null | undefined, size: number): string | null {
+  if (!url) return null;
+  const OBJECT = "/storage/v1/object/public/";
+  if (!url.includes(OBJECT)) return url;
+  const rendered = url.replace(OBJECT, "/storage/v1/render/image/public/");
+  return `${rendered}?width=${size}&height=${size}&resize=cover&quality=70`;
+}
+
 function loadImage(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(file);
