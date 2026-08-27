@@ -15,7 +15,13 @@ import type { Place } from "@/lib/types";
 // The gap is measured in world pixels, which depend on zoom but not on where
 // the map is panned. So the visible set changes only when you zoom: panning
 // never adds, removes, or reshuffles a marker.
-const MIN_PIN_GAP_PX = 52;
+//
+// This is the one knob for how full the map feels. A pin is 24px across, so
+// 30 leaves a few pixels between neighbours — packed, but nothing overlapping.
+// Against the current 167 places that's ~69 pins with the whole city on
+// screen and ~96 at the default zoom; 52 was airy to the point of looking
+// empty (50 and 74). Turn it down for a busier map, up for a calmer one.
+const MIN_PIN_GAP_PX = 30;
 // Past this zoom nothing is thinned at all. Without it, places within ~30 m of
 // each other (two spots in one block) would collide however far you zoomed in,
 // so a handful could never be reached from the map.
@@ -109,9 +115,9 @@ function pinPriority(places: Place[], selectedId: string | null): Place[] {
 }
 
 // The pins that fit at this zoom without colliding, best first.
-export function pinsThatFit(places: Place[], zoom: number, selectedId: string | null): Place[] {
+export function pinsThatFit(places: Place[], zoom: number, selectedId: string | null, gapPx = MIN_PIN_GAP_PX): Place[] {
   if (zoom >= NO_THIN_ZOOM) return places;
-  const gapSq = MIN_PIN_GAP_PX * MIN_PIN_GAP_PX;
+  const gapSq = gapPx * gapPx;
   const taken: { x: number; y: number }[] = [];
   const shown: Place[] = [];
   for (const place of pinPriority(places, selectedId)) {
