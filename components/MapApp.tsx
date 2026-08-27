@@ -27,8 +27,9 @@ function useIsMobile() {
 
 const TOP_N = 10;
 // Hard cap on how many places reach the map/list at once. Keeps the marker
-// count bounded (and the map readable) however big the dataset grows.
-const MAX_VISIBLE = 100;
+// count bounded however big the dataset grows — small pins that enlarge on
+// hover are what let this sit well above the old crowding limit.
+const MAX_VISIBLE = 150;
 
 // Trim to `limit` places drawn round-robin across categories, so one crowded
 // category can't push the rest off the map — food alone is ~2/3 of the data.
