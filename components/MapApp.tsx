@@ -25,6 +25,39 @@ function useIsMobile() {
 }
 
 const TOP_N = 10;
+// Hard cap on how many places reach the map/list at once. Keeps the marker
+// count bounded (and the map readable) however big the dataset grows.
+const MAX_VISIBLE = 100;
+
+// Trim to `limit` places drawn round-robin across categories, so one crowded
+// category can't push the rest off the map — food alone is ~2/3 of the data.
+// Each category gives up its best entries in turn; when one runs out, its
+// remaining slots go to the categories that still have depth. `rows` must
+// already be sorted, and the picked subset comes back in that same order.
+function capByCategory(rows: Place[], limit: number): Place[] {
+  if (rows.length <= limit) return rows;
+  const queues = new Map<Category, Place[]>();
+  for (const p of rows) {
+    const q = queues.get(p.category);
+    if (q) q.push(p);
+    else queues.set(p.category, [p]);
+  }
+  const lists = [...queues.values()];
+  const cursors = lists.map(() => 0);
+  const keep = new Set<string>();
+  let progressed = true;
+  while (keep.size < limit && progressed) {
+    progressed = false;
+    for (let i = 0; i < lists.length && keep.size < limit; i++) {
+      const next = lists[i][cursors[i]];
+      if (!next) continue;
+      cursors[i]++;
+      keep.add(next.id);
+      progressed = true;
+    }
+  }
+  return rows.filter((p) => keep.has(p.id));
+}
 // Set NEXT_PUBLIC_BMC_URL on Netlify to show the "Buy me a coffee" button
 // (e.g. https://buymeacoffee.com/yourhandle). No redeploy needed to change it.
 const BMC_URL = process.env.NEXT_PUBLIC_BMC_URL;
@@ -129,7 +162,9 @@ export default function MapApp() {
       buzzScore(b.vote_count, b.comment_count, b.trending_score) - buzzScore(a.vote_count, a.comment_count, a.trending_score));
     if (sort === "newest") sorted.sort((a, b) => b.created_at.localeCompare(a.created_at));
     if (sort === "loved") sorted.sort((a, b) => b.vote_count - a.vote_count);
-    return sorted;
+    // Cap after sorting/filtering, so a category filter still draws its top
+    // 100 from the whole dataset rather than from a pre-trimmed pool.
+    return capByCategory(sorted, MAX_VISIBLE);
   }, [places, activeCats, weekendOnly, query, sort]);
 
   // "Trending" and "Most loved" are rankings → show a numbered Top 10.

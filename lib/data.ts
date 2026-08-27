@@ -49,7 +49,11 @@ export async function fetchPlaces(): Promise<Place[]> {
     .from("places_with_stats")
     .select("*")
     .eq("status", "approved")
-    .order("trending_score", { ascending: false });
+    .order("trending_score", { ascending: false })
+    // Bound the payload as ingestion keeps adding rows. Deliberately well
+    // above the 100 shown at once: filters (category, search) pick from the
+    // whole set, so trimming to 100 here would starve them.
+    .limit(1000);
   if (error) throw error;
   return ((data ?? []) as Place[]).filter((p) => !isPastEvent(p));
 }
